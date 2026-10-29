@@ -26,6 +26,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -65,6 +66,11 @@ fun GameScreen(
     val scope = rememberCoroutineScope()
     var elapsed by remember { mutableLongStateOf(game.elapsedSeconds) }
 
+    // A finished game must not be written back as an unfinished one. The effect at the end of
+    // this function saves on every way out of the screen, including the one taken here, so the
+    // flag is what tells it that this exit is a finish.
+    var finished by remember { mutableStateOf(false) }
+
     // The clock is driven by the recomposition of the header rather than by a coroutine that
     // outlives the screen: a game that is not on screen is not being timed, which is what the
     // saved seconds mean.
@@ -76,6 +82,9 @@ fun GameScreen(
     }
 
     fun save() {
+        if (finished) {
+            return
+        }
         val save =
             when (game) {
                 is GameInProgress.Pipes ->
@@ -84,19 +93,30 @@ fun GameScreen(
                 is GameInProgress.Sudoku ->
                     SavedGame(GameKind.Sudoku, game.board.toSnapshot(), game.playerName, elapsed, System.currentTimeMillis())
             }
-        scope.launch { container.records.putSave(save) }
+        // A save the player made by leaving must outlive the screen, for the same reason the
+        // record does.
+        container.scope.launch { container.records.putSave(save) }
     }
 
+
     fun finish() {
-        scope.launch {
-            container.records.addRecord(
-                Record(
-                    key = game.key,
-                    playerName = game.playerName,
-                    seconds = elapsed,
-                    finishedAt = System.currentTimeMillis(),
-                ),
+        if (finished) {
+            return
+        }
+        finished = true
+        val record =
+            Record(
+                key = game.key,
+                playerName = game.playerName,
+                seconds = elapsed,
+                finishedAt = System.currentTimeMillis(),
             )
+        // The record is written in the container's scope, not this screen's: leaving the
+        // screen cancels a scope the screen owns, and the write would be cancelled with it,
+        // which is a game that finishes and leaves no record behind.
+        container.scope.launch {
+            container.records.addRecord(record)
+            container.records.clearSave(game.kind)
         }
         onFinished()
     }

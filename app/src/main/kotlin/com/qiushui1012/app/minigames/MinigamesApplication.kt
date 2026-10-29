@@ -15,6 +15,9 @@
 package com.qiushui1012.app.minigames
 
 import android.app.Application
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import android.content.Context
 import com.qiushui1012.app.minigames.data.RecordsStore
 import com.qiushui1012.app.minigames.data.SettingsStore
@@ -39,6 +42,10 @@ class MinigamesApplication : Application() {
             AppContainer(
                 settings = createSettingsStore(),
                 records = createRecordsStore(this),
+                // Writes that must outlive the screen that asked for them: finishing a game
+                // records it and then leaves the screen, and a scope owned by that screen
+                // would be cancelled between the two.
+                scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
             )
     }
 }
@@ -54,6 +61,8 @@ class AppContainer(
     val settings: SettingsStore,
     /** The finished games and the unfinished ones. */
     val records: RecordsStore,
+    /** The scope for work that must not end with the screen that started it. */
+    val scope: CoroutineScope,
 )
 
 /** Returns the container of this application. */

@@ -70,6 +70,10 @@
     <string name="records_time_columns">玩家、游戏、用时、完成时间</string>
     <string name="records_exported_at">导出时间 %1$s</string>
     <string name="records_unknown_player">未命名</string>
+    <string name="records_column_player">玩家</string>
+    <string name="records_column_game">玩法</string>
+    <string name="records_column_time">用时</string>
+    <string name="records_column_finished">完成时间</string>
 
     <string name="settings_title">设置</string>
     <string name="settings_player">默认玩家名</string>

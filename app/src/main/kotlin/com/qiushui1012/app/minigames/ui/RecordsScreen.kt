@@ -93,12 +93,20 @@ fun RecordsScreen(
     var shareTarget by remember { mutableStateOf<android.net.Uri?>(null) }
 
     val exportedAtLabel = stringResource(R.string.records_exported_at, currentStamp())
-    val label: (RecordKey) -> String = { key ->
-        when (key) {
-            is RecordKey.Pipes -> "${key.size} × ${key.size}"
-            is RecordKey.Sudoku -> key.difficulty
-        }
-    }
+    val unknownPlayer = stringResource(R.string.records_unknown_player)
+    // The label is the one the list uses, in the language the interface is in. A record's key
+    // carries a storage spelling (`easy`, `hard`), and an exported card that said `easy` beside
+    // a screen that said `简单` would be a picture of a different application. The pairs are
+    // resolved here, inside the composition, because the drawing runs outside it.
+    val labels: Map<RecordKey, String> = records.associate { record -> record.key to keyLabel(record.key) }
+    val label: (RecordKey) -> String = { key -> labels[key] ?: key.toString() }
+    val headers =
+        listOf(
+            stringResource(R.string.records_column_player),
+            stringResource(R.string.records_column_game),
+            stringResource(R.string.records_column_time),
+            stringResource(R.string.records_column_finished),
+        )
 
     fun export(selection: List<Record>) {
         if (selection.isEmpty()) {
@@ -109,9 +117,9 @@ fun RecordsScreen(
                 withContext(Dispatchers.Default) {
                     val bitmap =
                         if (selection.size == 1) {
-                            RecordImage.single(selection.first(), label, exportedAtLabel)
+                            RecordImage.single(selection.first(), label, unknownPlayer, exportedAtLabel)
                         } else {
-                            RecordImage.several(selection, label, exportedAtLabel)
+                            RecordImage.several(selection, label, unknownPlayer, exportedAtLabel, headers)
                         }
                     ImageExport.save(context, bitmap, "qualia-minigames-${System.currentTimeMillis()}.png")
                 }

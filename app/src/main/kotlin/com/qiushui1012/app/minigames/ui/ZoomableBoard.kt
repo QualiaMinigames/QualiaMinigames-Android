@@ -143,6 +143,14 @@ fun ZoomableBoard(
                         var moved = false
                         var pointerCount = 1
                         var zooming = false
+                        // The finger may lift while the long-press window is still open. That
+                        // up event is read inside the window and is the only one this gesture
+                        // will ever see, so the drag loop below must not wait for another: it
+                        // would block until the next finger went down, and that finger's own
+                        // tap would then be read as the end of this gesture. Every tap after
+                        // the first would be late by one, which on a sudoku is a digit landing
+                        // in the cell selected by the previous tap.
+                        var released = false
 
                         // A long press is the same gesture as a tap until it has lasted long
                         // enough to be one; the time is bounded rather than awaited forever so
@@ -153,6 +161,7 @@ fun ZoomableBoard(
                                     val event = awaitPointerEvent(PointerEventPass.Main)
                                     val pressed = event.changes.filter { it.pressed }
                                     if (pressed.isEmpty()) {
+                                        released = true
                                         return@withTimeoutOrNull false
                                     }
                                     pointerCount = pressed.size
@@ -185,8 +194,10 @@ fun ZoomableBoard(
                             return@awaitEachGesture
                         }
 
-                        // From here the gesture is a drag, a pinch, or a tap.
-                        while (true) {
+                        // From here the gesture is a drag, a pinch, or a tap. The loop is only
+                        // entered when there is still something to read, which the flag above
+                        // decides.
+                        while (!released) {
                             val event = awaitPointerEvent(PointerEventPass.Main)
                             val pressed = event.changes.filter { it.pressed }
                             if (pressed.isEmpty()) {

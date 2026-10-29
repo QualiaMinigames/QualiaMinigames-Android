@@ -34,6 +34,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class RecordImageTest {
+    /** The column headings the several-record layout draws. */
+    private val HEADERS = listOf("Player", "Game", "Time", "Finished")
+
     /** Returns a finished pipes game. */
     private fun pipes(seconds: Long) =
         Record(RecordKey.Pipes(9, wrapped = false), "Tester", seconds, 1_700_000_000_000)
@@ -48,15 +51,15 @@ class RecordImageTest {
 
     @Test
     fun asingle_record_is_a_card_of_the_export_width() {
-        val bitmap = RecordImage.single(pipes(90), label, "exported")
+        val bitmap = RecordImage.single(pipes(90), label, "Unnamed", "exported")
         assertEquals(RecordImage.width(), bitmap.width)
         assertTrue("the card has no height", bitmap.height > 0)
     }
 
     @Test
     fun a_column_grows_with_the_number_of_records() {
-        val few = RecordImage.several(listOf(pipes(90)), label, "exported")
-        val many = RecordImage.several(List(10) { pipes(90L + it) }, label, "exported")
+        val few = RecordImage.several(listOf(pipes(90)), label, "Unnamed", "exported", HEADERS)
+        val many = RecordImage.several(List(10) { pipes(90L + it) }, label, "Unnamed", "exported", HEADERS)
         assertTrue("the column did not grow", many.height > few.height)
         assertEquals(RecordImage.width(), many.width)
     }
@@ -64,13 +67,13 @@ class RecordImageTest {
     @Test
     fun the_column_height_matches_what_the_layout_reports() {
         val records = List(7) { pipes(60) }
-        val bitmap = RecordImage.several(records, label, "exported")
+        val bitmap = RecordImage.several(records, label, "Unnamed", "exported", HEADERS)
         assertEquals(RecordImage.severalHeight(records.size), bitmap.height)
     }
 
     @Test
     fun an_empty_column_is_still_a_valid_image() {
-        val bitmap = RecordImage.several(emptyList(), label, "exported")
+        val bitmap = RecordImage.several(emptyList(), label, "Unnamed", "exported", HEADERS)
         assertTrue(bitmap.width > 0)
         assertTrue(bitmap.height > 0)
         assertEquals(Bitmap.Config.ARGB_8888, bitmap.config)

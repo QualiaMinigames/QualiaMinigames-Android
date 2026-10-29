@@ -81,6 +81,10 @@
     <string name="records_time_columns">Player, Game, Time, Finished</string>
     <string name="records_exported_at">Exported %1$s</string>
     <string name="records_unknown_player">Unnamed</string>
+    <string name="records_column_player">Player</string>
+    <string name="records_column_game">Game</string>
+    <string name="records_column_time">Time</string>
+    <string name="records_column_finished">Finished</string>
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>

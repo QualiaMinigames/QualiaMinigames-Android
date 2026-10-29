@@ -175,11 +175,11 @@ class GameFlowTest {
     fun the_record_of_a_finished_game_export_to_an_image() {
         val record = Record(RecordKey.Pipes(9, wrapped = false), "QiuShui", 125, 1_700_000_000_000)
         val label: (RecordKey) -> String = { key -> key.toString() }
-        val single = RecordImage.single(record, label, "exported")
+        val single = RecordImage.single(record, label, "Unnamed", "exported")
         assertEquals(RecordImage.width(), single.width)
         assertTrue(single.height > 0)
 
-        val several = RecordImage.several(List(3) { record }, label, "exported")
+        val several = RecordImage.several(List(3) { record }, label, "Unnamed", "exported", listOf("Player", "Game", "Time", "Finished"))
         assertEquals(RecordImage.severalHeight(3), several.height)
     }
 }
