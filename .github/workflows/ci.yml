@@ -4,11 +4,17 @@ name: CI
 # call the real rules across the FFI rather than a mock, which is the only way a binding that
 # compiles but answers wrongly is caught before a device does.
 #
-# The two Rust repositories are checked out beside this one and the build is pointed at them.
-# That is what a developer does locally while the crates are unpublished, and it is what makes
-# this pipeline depend on the code rather than on a release having happened first. Once
-# `qualia-minigames-ffi` is on crates.io the checkouts can go and the build properties with
-# them; see docs/BUILDING.md.
+# # Why three checkouts
+#
+# `qualia-minigames-ffi` is not on crates.io yet, and a build that waits for it to be is a red
+# pipeline for a release that has not happened rather than for anything wrong with the code.
+# The two Rust repositories are therefore checked out beside this one, which is the layout a
+# developer has locally, and the build is pointed at them.
+#
+# `actions/checkout` cannot place a repository outside the workspace, so the workspace itself
+# is the parent: this repository lands in `Android/` and the siblings land next to it. The
+# order matters — checking this repository out first and then the siblings would put them
+# inside it, which is not the shape any of the build's paths expect.
 
 on:
   push:
@@ -23,20 +29,30 @@ jobs:
   build:
     name: test + assemble
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Android
+    env:
+      FLAGS: >-
+        -Pqualia.minigames.ffi.localDir=../FFI
+        -Pqualia.minigames.core.localDir=../Core
     steps:
-      - uses: actions/checkout@v4
-
-      # The siblings go one level up, which is where the build's properties point: `../FFI`
-      # and `../Core`, the same shape as a local workspace.
-      - uses: actions/checkout@v4
+      - name: Check out the core
+        uses: actions/checkout@v4
         with:
           repository: QualiaMinigames/QualiaMinigames-Core
-          path: ../Core
+          path: Core
 
-      - uses: actions/checkout@v4
+      - name: Check out the bindings
+        uses: actions/checkout@v4
         with:
           repository: QualiaMinigames/QualiaMinigames-FFI
-          path: ../FFI
+          path: FFI
+
+      - name: Check out this repository
+        uses: actions/checkout@v4
+        with:
+          path: Android
 
       - uses: actions/setup-java@v4
         with:
@@ -61,7 +77,7 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-            ../FFI/target
+            FFI/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
@@ -73,16 +89,16 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Unit tests
-        run: ./gradlew :app:testDebugUnitTest --console=plain -Pqualia.minigames.ffi.localDir=../FFI -Pqualia.minigames.core.localDir=../Core
+        run: ./gradlew :app:testDebugUnitTest --console=plain $FLAGS
 
       - name: Assemble the debug APK
-        run: ./gradlew :app:assembleDebug --console=plain -Pqualia.minigames.ffi.localDir=../FFI -Pqualia.minigames.core.localDir=../Core
+        run: ./gradlew :app:assembleDebug --console=plain $FLAGS
 
       - name: Upload the debug APK
         uses: actions/upload-artifact@v4
         with:
           name: qualia-minigames-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: Android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
   release:
@@ -91,18 +107,30 @@ jobs:
     # from a fork cannot have it and must not be the thing that fails.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Android
+    env:
+      FLAGS: >-
+        -Pqualia.minigames.ffi.localDir=../FFI
+        -Pqualia.minigames.core.localDir=../Core
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/checkout@v4
+      - name: Check out the core
+        uses: actions/checkout@v4
         with:
           repository: QualiaMinigames/QualiaMinigames-Core
-          path: ../Core
+          path: Core
 
-      - uses: actions/checkout@v4
+      - name: Check out the bindings
+        uses: actions/checkout@v4
         with:
           repository: QualiaMinigames/QualiaMinigames-FFI
-          path: ../FFI
+          path: FFI
+
+      - name: Check out this repository
+        uses: actions/checkout@v4
+        with:
+          path: Android
 
       - uses: actions/setup-java@v4
         with:
@@ -158,7 +186,7 @@ jobs:
 
       - name: Assemble the release APK
         if: steps.signing.outputs.configured == 'true'
-        run: ./gradlew :app:assembleRelease --console=plain -Pqualia.minigames.ffi.localDir=../FFI -Pqualia.minigames.core.localDir=../Core
+        run: ./gradlew :app:assembleRelease --console=plain $FLAGS
 
       # A build that quietly fell back to the debug key is not a release. The check is here
       # rather than inside the build because the build has to work without a keystore too.
@@ -178,6 +206,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: qualia-minigames-release
-          path: app/build/outputs/apk/release/app-release.apk
+          path: Android/app/build/outputs/apk/release/app-release.apk
           # Absent only when the signing key is, which the step above already reported.
           if-no-files-found: warn
