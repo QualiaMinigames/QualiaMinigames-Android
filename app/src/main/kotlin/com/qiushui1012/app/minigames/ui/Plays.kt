@@ -73,15 +73,6 @@ private val BoardTextDensity = Density(1f, 1f)
 /** The width of the board's frame, in board units. */
 private const val BOARD_FRAME = 0.03f
 
-/**
- * The pump's own colour, taken from the artwork.
- *
- * It is the one colour on the board that is not the theme's: the pump is a fitting rather than
- * a pipe, and an amber one says so whatever the theme is doing. The mark on it is drawn in the
- * water colour, because the water is what the mark is about.
- */
-private val PumpBody = Color(0xFFF9B745)
-
 /** The width of a box divider, as a fraction of a cell. */
 private const val BOX_DIVIDER = 0.030f
 
@@ -126,7 +117,9 @@ fun PipesPlay(
     val wall = MaterialTheme.colorScheme.onBackground
     val loopWall = if (dark) AlertDark else AlertLight
     val water = if (dark) WaterDark else WaterLight
-    val boardBackground = MaterialTheme.colorScheme.surface
+    // An empty pipe shows the board rather than a lighter panel: a white lumen would put a
+    // second colour into every cell and read as a highlight instead of as an empty pipe.
+    val boardBackground = MaterialTheme.colorScheme.background
     val size = board.size
 
     LaunchedEffect(solved) {
@@ -190,19 +183,17 @@ fun PipesPlay(
                             )
                         }
                     }
-                    // The pump goes over the pieces: it marks the cell the water comes from, and
-                    // a piece that covered it would hide the one cell the board is about.
+                    // The pump goes over the pieces: it marks the cell the water comes from,
+                    // and a piece that covered it would hide the one cell the board is about.
                     //
-                    // Its body is the artwork's amber rather than a theme colour: painted in the
-                    // water colour it would sit on the water it feeds and disappear into it. The
-                    // drop on it is drawn in the board's own background, which is the pair of
-                    // tones the artwork uses and reads on amber in either theme.
+                    // Its body keeps the colour its file declares, because a pump is a fitting
+                    // rather than a pipe and should not change with the theme. The drop on it is
+                    // painted in the water colour: the drop is what the pump feeds.
                     drawPump(
                         context = context,
                         cellX = (waterStart % size).toFloat(),
                         cellY = (waterStart / size).toFloat(),
-                        body = PumpBody,
-                        mark = boardBackground,
+                        mark = water,
                     )
                 },
                 modifier = Modifier.fillMaxSize(),
