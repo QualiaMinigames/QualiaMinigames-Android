@@ -365,6 +365,10 @@ dependencies {
     implementation(libs.composeUiToolingPreview)
     implementation(libs.composeFoundation)
     implementation(libs.composeMaterial3)
+    // The navigation's three icons. The core set holds exactly a house, a list and a pair of
+    // sliders, which is what the three pages need; the extended set would add thousands of
+    // shapes for nothing.
+    implementation(libs.composeMaterialIcons)
 
     // UniFFI's Kotlin bindings call the Rust library through JNA. The `aar` flavour is the
     // one that carries JNA's dispatcher for Android, and 5.17 or newer understands 16 KB

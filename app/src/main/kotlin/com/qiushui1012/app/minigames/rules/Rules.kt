@@ -110,6 +110,9 @@ interface PipesBoard {
     /** Returns the cells water reaches, in ascending order. */
     fun waterCells(): List<Int>
 
+    /** Returns the cell the pump stands on, which is where water enters the board. */
+    fun waterStart(): Int
+
     /** Writes the game, so it can be saved. */
     fun toSnapshot(): ByteArray
 }
@@ -283,6 +286,8 @@ private class Pipes(private val game: FfiPipesGame) : PipesBoard {
     override fun loopCells(): List<Int> = game.loopCells().map { it.toInt() }
 
     override fun waterCells(): List<Int> = game.waterCells().map { it.toInt() }
+
+    override fun waterStart(): Int = game.waterStart().toInt()
 
     override fun toSnapshot(): ByteArray = game.toSnapshot()
 }

@@ -28,6 +28,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -137,7 +143,7 @@ private fun NavigationIsland(
     }
 }
 
-/** One page of the navigation: a label on its own rounded surface. */
+/** One page of the navigation: an icon and a label on their own rounded surface. */
 @Composable
 private fun NavigationItem(
     tab: Tab,
@@ -145,27 +151,77 @@ private fun NavigationItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val label =
-        when (tab) {
-            Tab.Home -> stringResource(R.string.nav_home)
-            Tab.Records -> stringResource(R.string.nav_records)
-            Tab.Settings -> stringResource(R.string.nav_settings)
-        }
+    val label = navigationLabel(tab)
+    val icon = navigationIcon(tab)
     androidx.compose.material3.Surface(
-        modifier = modifier.padding(vertical = Space.xs),
+        modifier = modifier,
         shape = MaterialTheme.shapes.large,
         color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
         onClick = onClick,
     ) {
-        Box(modifier = Modifier.padding(vertical = Space.s), contentAlignment = Alignment.Center) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        // One padding rather than two: a margin outside the surface plus a padding inside it
+        // added up to a tab taller than the island holding it, so the selected state spilled
+        // past the island's rounded corner.
+        Box(
+            modifier = Modifier.padding(horizontal = Space.m, vertical = Space.xs),
+            contentAlignment = Alignment.Center,
+        ) {
+            // The icon sits above the label, and the label stays: an icon alone would be a
+            // guess for a page the player has not opened yet, and a label alone leaves the
+            // navigation looking like three words in a box.
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(Space.xs),
+            ) {
+                Icon(
+                    imageVector = icon,
+                    // The label beside it already says what the page is; a second reading of
+                    // the same words would be read out twice.
+                    contentDescription = null,
+                    tint =
+                        if (selected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                )
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color =
+                        if (selected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                )
+            }
         }
     }
 }
+
+/** Returns a page's label in the language the interface is in. */
+@Composable
+private fun navigationLabel(tab: Tab): String =
+    when (tab) {
+        Tab.Home -> stringResource(R.string.nav_home)
+        Tab.Records -> stringResource(R.string.nav_records)
+        Tab.Settings -> stringResource(R.string.nav_settings)
+    }
+
+/**
+ * Returns a page's icon.
+ *
+ * The shapes are the ones the Material Symbols page turns up for a house, a list of results and
+ * a pair of sliders. They come from `material-icons-core`, which is already on the classpath and
+ * holds exactly these three; the extended set is a library of thousands of shapes for three.
+ */
+private fun navigationIcon(tab: Tab): ImageVector =
+    when (tab) {
+        Tab.Home -> Icons.Filled.Home
+        Tab.Records -> Icons.Filled.List
+        Tab.Settings -> Icons.Filled.Settings
+    }
 
 /** The inset a scrolling page leaves at its end, for the navigation that floats over it. */
 @Composable

@@ -59,6 +59,7 @@ import com.qiushui1012.app.minigames.rules.PipesBoard
 import com.qiushui1012.app.minigames.rules.PipesLayout
 import com.qiushui1012.app.minigames.rules.PipesSide
 import com.qiushui1012.app.minigames.rules.SudokuBoard
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 
 /**
@@ -69,11 +70,17 @@ import androidx.compose.ui.res.stringResource
  */
 private val BoardTextDensity = Density(1f, 1f)
 
-/** The width of a pipe wall, as a fraction of a cell. */
-private const val WALL_WIDTH = 0.16f
+/** The width of the board's frame, in board units. */
+private const val BOARD_FRAME = 0.03f
 
-/** The width of the inside of a pipe, as a fraction of a cell. */
-private const val LUMEN_WIDTH = 0.09f
+/**
+ * The pump's own colour, taken from the artwork.
+ *
+ * It is the one colour on the board that is not the theme's: the pump is a fitting rather than
+ * a pipe, and an amber one says so whatever the theme is doing. The mark on it is drawn in the
+ * water colour, because the water is what the mark is about.
+ */
+private val PumpBody = Color(0xFFF9B745)
 
 /** The width of a box divider, as a fraction of a cell. */
 private const val BOX_DIVIDER = 0.030f
@@ -107,6 +114,10 @@ fun PipesPlay(
     onSolved: () -> Unit,
 ) {
     var revision by remember { mutableIntStateOf(0) }
+    // The pump stands still, so its cell is read once rather than on every frame.
+    val waterStart = remember(board) { board.waterStart() }
+    // The drawings live in `assets/`, and reading them needs the context that holds them.
+    val context = LocalContext.current
     var loopCells by remember { mutableStateOf(board.loopCells().toSet()) }
     var waterCells by remember { mutableStateOf(board.waterCells().toSet()) }
     var solved by remember { mutableStateOf(board.isSolved()) }
@@ -153,97 +164,51 @@ fun PipesPlay(
                     // that did not read the revision would be cached.
                     @Suppress("UNUSED_EXPRESSION")
                     revision
+                    // The frame is drawn first, so a piece's rounded ends sit against a line
+                    // that closes the board rather than fading into the page.
+                    drawRect(
+                        color = wall,
+                        topLeft = Offset.Zero,
+                        size = Size(size.toFloat(), size.toFloat()),
+                        style = Stroke(width = BOARD_FRAME),
+                    )
                     for (row in 0 until size) {
                         for (column in 0 until size) {
                             val index = row * size + column
                             val piece = board.piece(index)
-                            val joins = buildList {
-                                if (piece and PipesSide.TOP != 0) {
-                                    add(Direction.Up)
-                                }
-                                if (piece and PipesSide.RIGHT != 0) {
-                                    add(Direction.Right)
-                                }
-                                if (piece and PipesSide.BOTTOM != 0) {
-                                    add(Direction.Down)
-                                }
-                                if (piece and PipesSide.LEFT != 0) {
-                                    add(Direction.Left)
-                                }
-                            }
-                            if (joins.isEmpty()) {
-                                continue
-                            }
+                            val placement = pipeShapeOf(piece) ?: continue
                             val onLoop = index in loopCells
                             val wet = index in waterCells
-                            drawPiece(
-                                row = row,
-                                column = column,
-                                joins = joins,
+                            drawPipe(
+                                context = context,
+                                cellX = column.toFloat(),
+                                cellY = row.toFloat(),
+                                shape = placement.first,
+                                turns = placement.second,
                                 wall = if (onLoop) loopWall else wall,
                                 lumen = if (wet) water else boardBackground,
-                                wrapped = board.layout == PipesLayout.Wrapped,
                             )
                         }
                     }
+                    // The pump goes over the pieces: it marks the cell the water comes from, and
+                    // a piece that covered it would hide the one cell the board is about.
+                    //
+                    // Its body is the artwork's amber rather than a theme colour: painted in the
+                    // water colour it would sit on the water it feeds and disappear into it. The
+                    // drop on it is drawn in the board's own background, which is the pair of
+                    // tones the artwork uses and reads on amber in either theme.
+                    drawPump(
+                        context = context,
+                        cellX = (waterStart % size).toFloat(),
+                        cellY = (waterStart / size).toFloat(),
+                        body = PumpBody,
+                        mark = boardBackground,
+                    )
                 },
                 modifier = Modifier.fillMaxSize(),
             )
         }
     }
-}
-
-/** Which side of a cell a pipe reaches. */
-private enum class Direction {
-    /** The top side. */
-    Up,
-
-    /** The right side. */
-    Right,
-
-    /** The bottom side. */
-    Down,
-
-    /** The left side. */
-    Left,
-}
-
-/**
- * Draws one piece.
- *
- * The piece is drawn from its cell's centre towards each side it joins. A side that leads off
- * a flat board is still drawn up to the edge: the piece has an end there, and a piece whose
- * ends were clipped would look like a different piece.
- */
-private fun DrawScope.drawPiece(
-    row: Int,
-    column: Int,
-    joins: List<Direction>,
-    wall: Color,
-    lumen: Color,
-    @Suppress("UNUSED_PARAMETER") wrapped: Boolean,
-) {
-    val centreX = column + 0.5f
-    val centreY = row + 0.5f
-    val half = 0.5f
-
-    for (direction in joins) {
-        val end =
-            when (direction) {
-                Direction.Up -> Offset(centreX, centreY - half)
-                Direction.Right -> Offset(centreX + half, centreY)
-                Direction.Down -> Offset(centreX, centreY + half)
-                Direction.Left -> Offset(centreX - half, centreY)
-            }
-        val start = Offset(centreX, centreY)
-        drawLine(color = wall, start = start, end = end, strokeWidth = WALL_WIDTH, cap = StrokeCap.Butt)
-        drawLine(color = lumen, start = start, end = end, strokeWidth = LUMEN_WIDTH, cap = StrokeCap.Butt)
-    }
-
-    // The junction: the walls of two arms meet here, so the hub is a ring rather than a
-    // filled dot, which would cover the lumen where the arms meet.
-    drawCircle(color = wall, radius = WALL_WIDTH / 2f, center = Offset(centreX, centreY))
-    drawCircle(color = lumen, radius = LUMEN_WIDTH / 2f, center = Offset(centreX, centreY))
 }
 
 /**
