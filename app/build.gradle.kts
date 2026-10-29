@@ -168,10 +168,50 @@ val buildRustLibrary =
 // Generates the Kotlin half of the bindings from the freshly built library. A host build is
 // what the generator reads, because the bindings describe the interface and not the
 // instruction set it runs on; the Android libraries are what answer the calls.
+// ── The host library the unit tests load ──────────────────────────────────────────
+//
+// The unit tests run on the JVM, and the rules they exercise are the same Rust code the
+// device runs: the point of testing here is that the binding answers correctly, which a mock
+// could not show. The host library is therefore built and put on the test classpath, where
+// JNA finds it by its plain name.
+val hostLibraryName =
+    when {
+        org.gradle.internal.os.OperatingSystem.current().isWindows -> "qualia_minigames_ffi.dll"
+        org.gradle.internal.os.OperatingSystem.current().isMacOsX -> "libqualia_minigames_ffi.dylib"
+        else -> "libqualia_minigames_ffi.so"
+    }
+
+val buildHostRustLibrary =
+    tasks.register("buildHostRustLibrary") {
+        description = "Builds the FFI crate for this machine, so the JVM tests can load it."
+        dependsOn(materializeRustSource)
+        // The two Rust tasks write into the same `target/`, but neither consumes what the
+        // other produces: the cross build copies into `jniLibs`, the host build is read by
+        // the bindings generator. Declaring that directory as an input of both would make
+        // Gradle call them dependent, which they are not.
+        mustRunAfter(materializeRustSource)
+        doLast {
+            providers.exec {
+                commandLine(
+                    "cargo",
+                    "build",
+                    "--release",
+                    "--manifest-path",
+                    rustManifest.absolutePath,
+                )
+                workingDir = rustSourceDir
+            }.result.get().assertNormalExitValue()
+        }
+    }
+
 val generateUniffiBindings =
     tasks.register("generateUniffiBindings") {
         description = "Generates the Kotlin bindings from the Rust library."
-        dependsOn(buildRustLibrary)
+        // The generator reads a host library, because the bindings describe the interface and
+        // not the instruction set they answer on. Making that library a prerequisite of this
+        // task rather than of the tests alone is what lets a clean `assembleRelease` work: it
+        // used to fail with "no host library was found" when no test had run before it.
+        dependsOn(buildHostRustLibrary)
         inputs.dir(rustSourceDir)
         outputs.dir(generatedBindingsDir)
         doLast {
@@ -360,39 +400,6 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 tasks.named("preBuild") {
     dependsOn(generateUniffiBindings)
 }
-
-// ── The host library the unit tests load ──────────────────────────────────────────
-//
-// The unit tests run on the JVM, and the rules they exercise are the same Rust code the
-// device runs: the point of testing here is that the binding answers correctly, which a mock
-// could not show. The host library is therefore built and put on the test classpath, where
-// JNA finds it by its plain name.
-val hostLibraryName =
-    when {
-        org.gradle.internal.os.OperatingSystem.current().isWindows -> "qualia_minigames_ffi.dll"
-        org.gradle.internal.os.OperatingSystem.current().isMacOsX -> "libqualia_minigames_ffi.dylib"
-        else -> "libqualia_minigames_ffi.so"
-    }
-
-val buildHostRustLibrary =
-    tasks.register("buildHostRustLibrary") {
-        description = "Builds the FFI crate for this machine, so the JVM tests can load it."
-        dependsOn(materializeRustSource)
-        // The two Rust tasks write into the same 	arget/, but neither consumes what the${nl}        // other produces: the cross build copies into jniLibs, the host build is read by a${nl}        // JVM test. Declaring the directory as an input of both would make Gradle call them${nl}        // dependent, which they are not.
-        mustRunAfter(materializeRustSource)
-        doLast {
-            providers.exec {
-                commandLine(
-                    "cargo",
-                    "build",
-                    "--release",
-                    "--manifest-path",
-                    rustManifest.absolutePath,
-                )
-                workingDir = rustSourceDir
-            }.result.get().assertNormalExitValue()
-        }
-    }
 
 tasks.withType<Test>().configureEach {
     dependsOn(buildHostRustLibrary, generateUniffiBindings)
