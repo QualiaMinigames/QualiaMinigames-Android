@@ -45,41 +45,11 @@ plugins {
 val ffiCrateVersion = providers.gradleProperty("qualia.minigames.ffi.version").getOrElse("0.1.0")
 val ffiCrateSha256 = providers.gradleProperty("qualia.minigames.ffi.sha256").orNull
 val ffiLocalDir = providers.gradleProperty("qualia.minigames.ffi.localDir").orNull
-val coreLocalDir = providers.gradleProperty("qualia.minigames.core.localDir").orNull
 val rustSourceDir = ffiLocalDir?.let { rootProject.file(it) } ?: layout.projectDirectory.dir("rust").asFile
 val rustManifest = rustSourceDir.resolve("Cargo.toml")
 
 require(ffiLocalDir == null || rustManifest.isFile) {
     "qualia.minigames.ffi.localDir points at $rustSourceDir, which holds no Cargo.toml"
-}
-
-require(coreLocalDir == null || ffiLocalDir != null) {
-    "qualia.minigames.core.localDir is only meaningful together with qualia.minigames.ffi.localDir"
-}
-
-// ── The patch that makes a local FFI checkout resolve ──────────────────────────────
-//
-// A local FFI checkout names the core crate by version, because that is what a published
-// build needs. Until the core is published that version resolves to nothing, so a local
-// build redirects it at a local checkout through `[patch.crates-io]`. The file is written
-// rather than committed: it names an absolute path that only one machine has, and a
-// checked-in copy would point every other build at a directory that is not there.
-//
-// Nothing is written when no core directory is given, which is what a released build does:
-// it wants the published crate, and a patch would replace it with something else.
-if (coreLocalDir != null) {
-    val coreDir = rootProject.file(coreLocalDir).invariantSeparatorsPath
-    val configFile = rustSourceDir.resolve(".cargo/config.toml")
-    val desired =
-        """
-        # Written by the Android build from -Pqualia.minigames.core.localDir. Do not edit.
-        [patch.crates-io]
-        qualia-minigames-core = { path = "$coreDir" }
-        """.trimIndent() + "\n"
-    if (!configFile.isFile || configFile.readText() != desired) {
-        configFile.parentFile.mkdirs()
-        configFile.writeText(desired)
-    }
 }
 
 // The UniFFI release the bindings generator is pinned to. The generated Kotlin and the

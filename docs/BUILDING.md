@@ -3,25 +3,6 @@
 本文件说明本仓库的 CI 需要哪些 Secrets、它们各自对应 `keystore.properties` 的哪个字段，
 以及发布一条版本的顺序。
 
-## 两个 Rust 仓库的位置
-
-本仓库不包含 `Core` 与 `FFI`，也没有 submodule。开发期用两个属性指向本地检出：
-
-```powershell
-./gradlew :app:assembleDebug "-Pqualia.minigames.ffi.localDir=../FFI" "-Pqualia.minigames.core.localDir=../Core"
-```
-
-- `qualia.minigames.ffi.localDir` 指向 FFI 仓库，代替从 crates.io 解包。
-- `qualia.minigames.core.localDir` 让构建在 FFI 检出里写一份 `.cargo/config.toml`，把 core
-  的版本依赖重定向到本地。该文件被 git 忽略，因为里面是只有一台机器才有的绝对路径；构建
-  每次按需重写。
-
-只给 FFI 路径不给 Core 路径时，FFI 会按版本号去 crates.io 找 core，而那个版本在发布之前
-不存在。这适用于 core 已发布、只有 FFI 未发布的阶段。
-
-CI 把两个仓库检出到上一级目录（`../Core`、`../FFI`），再传这两个属性，因此它验证的是三个
-仓库当前的代码，而不是某个已发布版本。
-
 ## Secrets 对照表
 
 CI 在 `assembleRelease` 之前把 Secrets 写成本地 `keystore.properties`，所以在本地与 CI
@@ -37,9 +18,6 @@ CI 在 `assembleRelease` 之前把 Secrets 写成本地 `keystore.properties`，
 `storeFile` 之所以是 Base64 而不是路径：CI 的 runner 上没有这个文件，而把它提交进仓库
 等于公开了私钥。Base64 让一个 Secret 携带整个文件，解码后落在临时目录里，随 runner 一起
 销毁。
-
-CI 在构建后运行 `apksigner verify` 并检查证书 DN：一旦签名回落到调试密钥，这一步会失败，
-而不是产出一个装得上但不能发布的包。
 
 ## 本地创建签名密钥
 

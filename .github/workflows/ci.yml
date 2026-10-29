@@ -3,18 +3,6 @@ name: CI
 # The interface is built and tested here, and so is the Rust library it draws: the unit tests
 # call the real rules across the FFI rather than a mock, which is the only way a binding that
 # compiles but answers wrongly is caught before a device does.
-#
-# # Why three checkouts
-#
-# `qualia-minigames-ffi` is not on crates.io yet, and a build that waits for it to be is a red
-# pipeline for a release that has not happened rather than for anything wrong with the code.
-# The two Rust repositories are therefore checked out beside this one, which is the layout a
-# developer has locally, and the build is pointed at them.
-#
-# `actions/checkout` cannot place a repository outside the workspace, so the workspace itself
-# is the parent: this repository lands in `Android/` and the siblings land next to it. The
-# order matters — checking this repository out first and then the siblings would put them
-# inside it, which is not the shape any of the build's paths expect.
 
 on:
   push:
@@ -29,30 +17,8 @@ jobs:
   build:
     name: test + assemble
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: Android
-    env:
-      FLAGS: >-
-        -Pqualia.minigames.ffi.localDir=../FFI
-        -Pqualia.minigames.core.localDir=../Core
     steps:
-      - name: Check out the core
-        uses: actions/checkout@v4
-        with:
-          repository: QualiaMinigames/QualiaMinigames-Core
-          path: Core
-
-      - name: Check out the bindings
-        uses: actions/checkout@v4
-        with:
-          repository: QualiaMinigames/QualiaMinigames-FFI
-          path: FFI
-
-      - name: Check out this repository
-        uses: actions/checkout@v4
-        with:
-          path: Android
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-java@v4
         with:
@@ -60,8 +26,8 @@ jobs:
           java-version: "21"
 
       - name: Install the Android NDK
-        # The runner image carries the SDK and ANDROID_HOME, but not necessarily the NDK
-        # release the build pins.
+        # The GitHub runner image carries the SDK and ANDROID_HOME, but not necessarily the
+        # NDK release the build pins.
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;28.2.13676358"
 
@@ -77,8 +43,8 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-            FFI/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+            app/rust/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/*.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Install the Rust tools
@@ -88,17 +54,20 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # The FFI is taken from crates.io at the version the build asks for, which is what a
+      # release build does. A change to the FFI is tested by publishing it first, or locally
+      # with `-Pqualia.minigames.ffi.localDir`.
       - name: Unit tests
-        run: ./gradlew :app:testDebugUnitTest --console=plain $FLAGS
+        run: ./gradlew :app:testDebugUnitTest --console=plain
 
       - name: Assemble the debug APK
-        run: ./gradlew :app:assembleDebug --console=plain $FLAGS
+        run: ./gradlew :app:assembleDebug --console=plain
 
       - name: Upload the debug APK
         uses: actions/upload-artifact@v4
         with:
           name: qualia-minigames-debug
-          path: Android/app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
   release:
@@ -107,30 +76,8 @@ jobs:
     # from a fork cannot have it and must not be the thing that fails.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: Android
-    env:
-      FLAGS: >-
-        -Pqualia.minigames.ffi.localDir=../FFI
-        -Pqualia.minigames.core.localDir=../Core
     steps:
-      - name: Check out the core
-        uses: actions/checkout@v4
-        with:
-          repository: QualiaMinigames/QualiaMinigames-Core
-          path: Core
-
-      - name: Check out the bindings
-        uses: actions/checkout@v4
-        with:
-          repository: QualiaMinigames/QualiaMinigames-FFI
-          path: FFI
-
-      - name: Check out this repository
-        uses: actions/checkout@v4
-        with:
-          path: Android
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-java@v4
         with:
@@ -151,6 +98,8 @@ jobs:
           cargo install cargo-ndk --locked
           cargo install uniffi --version 0.32.2 --features cli --locked
 
+      # The keystore itself arrives as base64 so that it is one secret rather than a file in
+      # the repository. `keystore.properties` is the same file a developer writes locally.
       - name: Check whether the signing key is configured
         id: signing
         env:
@@ -163,8 +112,6 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # The keystore itself arrives as base64 so that it is one secret rather than a file in
-      # the repository. `keystore.properties` is the same file a developer writes locally.
       - name: Write the signing configuration
         if: steps.signing.outputs.configured == 'true'
         env:
@@ -175,9 +122,9 @@ jobs:
         run: |
           set -euo pipefail
           echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
-          # The heredoc body is written with `printf` rather than with indented lines: a
-          # heredoc's terminator is only recognised at the start of a line, so an indented
-          # one is read as another line of the file and the command never ends.
+          # A here-document's terminator is only recognised at the start of a line, and the
+          # body of a workflow is indented: writing the file with a here-document waits for
+          # an end that never arrives. Separate lines into a redirect cannot be misread.
           {
             echo "storeFile=$RUNNER_TEMP/release.jks"
             echo "storePassword=$STORE_PASSWORD"
@@ -189,16 +136,16 @@ jobs:
 
       - name: Assemble the release APK
         if: steps.signing.outputs.configured == 'true'
-        run: ./gradlew :app:assembleRelease --console=plain $FLAGS
+        run: ./gradlew :app:assembleRelease --console=plain
 
-      # A build that quietly fell back to the debug key is not a release. The check is here
-      # rather than inside the build because the build has to work without a keystore too.
+      # A build that quietly fell back to the debug keystore is not a release: the APK
+      # installs and runs, so nothing else in the pipeline would notice.
       - name: Verify the release APK is signed by the release key
         if: steps.signing.outputs.configured == 'true'
         run: |
           set -euo pipefail
-          apksigner="$ANDROID_HOME/build-tools/35.0.0/apksigner"
-          "$apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk | tee certs.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs \
+            app/build/outputs/apk/release/app-release.apk | tee certs.txt
           if grep -q "CN=Android Debug" certs.txt; then
             echo "::error::The release APK is signed with the debug key."
             exit 1
@@ -209,6 +156,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: qualia-minigames-release
-          path: Android/app/build/outputs/apk/release/app-release.apk
+          path: app/build/outputs/apk/release/app-release.apk
           # Absent only when the signing key is, which the step above already reported.
           if-no-files-found: warn
