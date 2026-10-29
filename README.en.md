@@ -57,12 +57,17 @@ depends on `qualia-minigames-ffi` from crates.io; while the FFI or the core is b
 either of these makes the change visible here:
 
 ```powershell
-# Point at a local FFI checkout (recommended: the change is visible immediately)
-./gradlew :app:assembleDebug "-Pqualia.minigames.ffi.localDir=../FFI"
+# Point at a local FFI and core checkout (recommended: the change is visible immediately)
+./gradlew :app:assembleDebug "-Pqualia.minigames.ffi.localDir=../FFI" "-Pqualia.minigames.core.localDir=../Core"
 
-# Without the property, the build downloads qualia-minigames-ffi 0.1.0 from crates.io into app/rust/
+# Without the properties, the build downloads qualia-minigames-ffi 0.1.0 from crates.io
 ./gradlew :app:assembleDebug
 ```
+
+The core path is optional: it is needed only while the core is unpublished, because the FFI
+names it by version. Given it, the build writes a `.cargo/config.toml` inside the FFI checkout
+that points that dependency at the local copy; the file is git ignored because it holds an
+absolute path only one machine has.
 
 `app/rust/` is the unpacked crate and is git ignored; deleting it re-unpacks it. Both paths
 generate the Kotlin bindings from the same Rust source, so the two halves of a binding always

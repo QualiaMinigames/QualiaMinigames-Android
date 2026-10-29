@@ -3,6 +3,12 @@ name: CI
 # The interface is built and tested here, and so is the Rust library it draws: the unit tests
 # call the real rules across the FFI rather than a mock, which is the only way a binding that
 # compiles but answers wrongly is caught before a device does.
+#
+# The two Rust repositories are checked out beside this one and the build is pointed at them.
+# That is what a developer does locally while the crates are unpublished, and it is what makes
+# this pipeline depend on the code rather than on a release having happened first. Once
+# `qualia-minigames-ffi` is on crates.io the checkouts can go and the build properties with
+# them; see docs/BUILDING.md.
 
 on:
   push:
@@ -20,14 +26,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The siblings go one level up, which is where the build's properties point: `../FFI`
+      # and `../Core`, the same shape as a local workspace.
+      - uses: actions/checkout@v4
+        with:
+          repository: QualiaMinigames/QualiaMinigames-Core
+          path: ../Core
+
+      - uses: actions/checkout@v4
+        with:
+          repository: QualiaMinigames/QualiaMinigames-FFI
+          path: ../FFI
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
 
       - name: Install the Android NDK
-        # The GitHub runner image carries the SDK and ANDROID_HOME, but not necessarily the
-        # NDK release the build pins.
+        # The runner image carries the SDK and ANDROID_HOME, but not necessarily the NDK
+        # release the build pins.
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;28.2.13676358"
 
@@ -43,8 +61,8 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-            app/rust/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/*.lock') }}
+            ../FFI/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Install the Rust tools
@@ -54,14 +72,11 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # The FFI is taken from crates.io at the version the build asks for, which is what a
-      # release build does. A change to the FFI is tested by publishing it first, or locally
-      # with `-Pqualia.minigames.ffi.localDir`.
       - name: Unit tests
-        run: ./gradlew :app:testDebugUnitTest --console=plain
+        run: ./gradlew :app:testDebugUnitTest --console=plain -Pqualia.minigames.ffi.localDir=../FFI -Pqualia.minigames.core.localDir=../Core
 
       - name: Assemble the debug APK
-        run: ./gradlew :app:assembleDebug --console=plain
+        run: ./gradlew :app:assembleDebug --console=plain -Pqualia.minigames.ffi.localDir=../FFI -Pqualia.minigames.core.localDir=../Core
 
       - name: Upload the debug APK
         uses: actions/upload-artifact@v4
@@ -79,6 +94,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/checkout@v4
+        with:
+          repository: QualiaMinigames/QualiaMinigames-Core
+          path: ../Core
+
+      - uses: actions/checkout@v4
+        with:
+          repository: QualiaMinigames/QualiaMinigames-FFI
+          path: ../FFI
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -98,8 +123,6 @@ jobs:
           cargo install cargo-ndk --locked
           cargo install uniffi --version 0.32.2 --features cli --locked
 
-      # The keystore itself arrives as base64 so that it is one secret rather than a file in
-      # the repository. `keystore.properties` is the same file a developer writes locally.
       - name: Check whether the signing key is configured
         id: signing
         env:
@@ -112,6 +135,8 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # The keystore itself arrives as base64 so that it is one secret rather than a file in
+      # the repository. `keystore.properties` is the same file a developer writes locally.
       - name: Write the signing configuration
         if: steps.signing.outputs.configured == 'true'
         env:
@@ -133,7 +158,20 @@ jobs:
 
       - name: Assemble the release APK
         if: steps.signing.outputs.configured == 'true'
-        run: ./gradlew :app:assembleRelease --console=plain
+        run: ./gradlew :app:assembleRelease --console=plain -Pqualia.minigames.ffi.localDir=../FFI -Pqualia.minigames.core.localDir=../Core
+
+      # A build that quietly fell back to the debug key is not a release. The check is here
+      # rather than inside the build because the build has to work without a keystore too.
+      - name: Verify the release APK is signed by the release key
+        if: steps.signing.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          apksigner="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          "$apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk | tee certs.txt
+          if grep -q "CN=Android Debug" certs.txt; then
+            echo "::error::The release APK is signed with the debug key."
+            exit 1
+          fi
 
       - name: Upload the release APK
         if: steps.signing.outputs.configured == 'true'

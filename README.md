@@ -55,14 +55,18 @@ QualiaMinigames/               （工作区根，三个仓库平铺）
 的 `qualia-minigames-ffi`；开发期改动了 FFI 或 Core 时，用下面两种方式之一让本仓库看到：
 
 ```powershell
-# 方式一：指向本地 FFI 仓库（推荐，改动立即生效）
-./gradlew :app:assembleDebug "-Pqualia.minigames.ffi.localDir=../FFI"
+# 方式一：指向本地 FFI 与 Core 仓库（推荐，改动立即生效）
+./gradlew :app:assembleDebug "-Pqualia.minigames.ffi.localDir=../FFI" "-Pqualia.minigames.core.localDir=../Core"
 
 # 方式二：不传参数，构建会下载 crates.io 上 qualia-minigames-ffi 0.1.0 到 app/rust/
 ./gradlew :app:assembleDebug
 ```
 
-`app/rust/` 是从 crates.io 解包出来的源码，已在 `.gitignore` 中，删掉即可重新解包。两种
+Core 路径不是必须的：只有 core 尚未发布到 crates.io 时才需要，因为 FFI 按版本号依赖它。
+传了 core 路径，构建会在 FFI 检出里写一份 `.cargo/config.toml` 把该依赖指向本地，该文件
+被 git 忽略，因为里面是只有一台机器才有的绝对路径。
+
+`app/rust/` 是从 crates.io 解包出来的源码，已在 `.gitignore` 中，删掉即可重新解包。所有
 方式都从同一份 Rust 源码生成 Kotlin 绑定，所以绑定的 Kotlin 一半与 Rust 一半永远同源。
 
 ## 构建
