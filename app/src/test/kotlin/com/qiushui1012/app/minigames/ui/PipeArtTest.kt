@@ -25,11 +25,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * The artwork files, read as the board reads them.
+ * The artwork files and the turns that point them.
  *
- * These run against the assets in `assets/`, which is what the device loads. A file the parser
- * cannot make sense of, or a shape whose turns do not point the way its mask says, is the kind of
- * fault that shows up as a board that looks wrong rather than as an error.
+ * The files are read here exactly as the board reads them, so a file the parser cannot make sense
+ * of fails here rather than as a board that draws nothing.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
@@ -46,43 +45,40 @@ class PipeArtTest {
     }
 
     @Test
-    fun a_straight_is_two_walls_and_nothing_else() {
+    fun every_pipe_file_draws_its_lumen_as_well_as_its_walls() {
+        // The lumen is a path in the file, drawn white, so a shape that reached the board without
+        // one would be a hollow outline with the board showing through it.
+        for (shape in PipeArt.Shape.entries) {
+            val drawing = PipeArt.of(context, shape)
+            assertTrue("${shape.file} draws no lumen", drawing.bands.any { it.isLumen })
+            assertTrue("${shape.file} draws no wall", drawing.bands.any { !it.isLumen })
+        }
+    }
+
+    @Test
+    fun a_straight_is_two_walls_and_a_lumen() {
         val drawing = PipeArt.of(context, PipeArt.Shape.Straight)
-        assertEquals("a straight is drawn as two bands", 2, drawing.bands.size)
+        assertEquals("two walls", 2, drawing.bands.count { !it.isLumen })
+        assertTrue("at least one lumen path", drawing.bands.count { it.isLumen } >= 1)
     }
 
     @Test
-    fun a_cross_is_four_walls() {
-        val drawing = PipeArt.of(context, PipeArt.Shape.Cross)
-        assertEquals("a cross is drawn as four bands", 4, drawing.bands.size)
-    }
-
-    @Test
-    fun the_lumen_is_narrower_than_the_cell_so_it_stays_inside() {
-        assertTrue(
-            "a lumen as wide as the cell would cover the walls",
-            PipeArt.LUMEN_WIDTH < PipeArt.SIZE,
-        )
-        assertTrue("the lumen has no width", PipeArt.LUMEN_WIDTH > 0f)
-    }
-
-    @Test
-    fun a_wall_band_lies_between_the_centre_and_the_edge() {
-        // The straight's first band runs from x = 7.65 to 9.65, so its bounds must sit on the
-        // left of the square and stop short of the middle.
+    fun a_wall_band_lies_between_the_edge_and_the_middle() {
+        // The straight's first wall runs from x = 7.65 to 9.65, so it must sit left of the middle
+        // and be two units wide.
         val drawing = PipeArt.of(context, PipeArt.Shape.Straight)
-        val bounds = drawing.bands.first().path.getBounds()
-        assertTrue("the first band is not on the left", bounds.left < PipeArt.CENTRE)
-        assertTrue("the first band crosses the middle", bounds.right <= PipeArt.CENTRE)
-        assertEquals("the band is not two units wide", 2f, bounds.width, 0.01f)
+        val bounds = drawing.bands.first { !it.isLumen }.path.getBounds()
+        assertTrue("the wall is not on the left", bounds.left < PipeArt.CENTRE)
+        assertTrue("the wall crosses the middle", bounds.right <= PipeArt.CENTRE)
+        assertEquals("the wall is not two units wide", 2f, bounds.width, 0.01f)
     }
 
     @Test
     fun the_pump_reads_as_two_faces_in_two_colours() {
         val drawing = PipeArt.pump(context)
-        assertEquals("the pump is a body and a drop", 2, drawing.bands.size)
+        assertEquals("the pump is a body and a mark", 2, drawing.bands.size)
         assertTrue(
-            "the body and the drop are the same colour in the file",
+            "the body and the mark share a colour in the file",
             drawing.bands[0].color != drawing.bands[1].color,
         )
     }
@@ -95,15 +91,68 @@ class PipeArtTest {
     }
 
     @Test
-    fun the_shape_of_a_mask_joins_the_sides_the_mask_names() {
-        assertEquals(PipeArt.Shape.Straight, pipeShapeOf(PipeSides.TOP or PipeSides.BOTTOM)?.first)
-        assertEquals(PipeArt.Shape.Bend, pipeShapeOf(PipeSides.TOP or PipeSides.LEFT)?.first)
-        assertEquals(PipeArt.Shape.Cross, pipeShapeOf(15)?.first)
+    fun the_turn_of_a_shape_lands_on_the_sides_the_mask_names() {
+        // The property that matters: whatever pair is returned, turning the drawing's own sides by
+        // that many quarter turns has to give back the mask the piece joins. A tee that turned the
+        // wrong way would satisfy every other check here and draw the wrong piece.
+        for (mask in 1..15) {
+            val (shape, turns) = requireNotNull(pipeShapeOf(mask))
+            assertEquals(
+                "mask $mask is drawn as ${shape.file} turned $turns",
+                mask,
+                rotateSides(shape.sides, turns),
+            )
+        }
+    }
+
+    @Test
+    fun a_tee_turns_a_quarter_turn_at_a_time() {
+        // The tee's file joins up, down and left — a `┣`. One quarter turn clockwise carries each
+        // arm one side round, which is the case that used to be drawn as a `┫` and is the reason
+        // this is checked by name rather than by a number.
+        val tee = PipeArt.Shape.Tee
         assertEquals(
-            PipeArt.Shape.Tee,
-            pipeShapeOf(PipeSides.TOP or PipeSides.LEFT or PipeSides.BOTTOM)?.first,
+            "the tee's own sides are not up, down and left",
+            setOf(PipeSides.TOP, PipeSides.BOTTOM, PipeSides.LEFT),
+            sidesOf(tee.sides),
         )
-        assertEquals(PipeArt.Shape.End, pipeShapeOf(PipeSides.RIGHT)?.first)
+        assertEquals(
+            "one turn is not a ┳",
+            setOf(PipeSides.TOP, PipeSides.RIGHT, PipeSides.LEFT),
+            sidesOf(rotateSides(tee.sides, 1)),
+        )
+        // Four turns come back to the drawing, and each turn moves every arm: that is what makes
+        // the other two directions right without listing them, which is where the mistakes were.
+        assertEquals("four turns are not the drawing", tee.sides, rotateSides(tee.sides, 4))
+        assertEquals(
+            "two turns are not made of the same arms as one, moved once more",
+            sidesOf(rotateSides(tee.sides, 1)).map { turn(it) }.toSet(),
+            sidesOf(rotateSides(tee.sides, 2)),
+        )
+    }
+
+    /** Returns the side one quarter turn clockwise from [side]. */
+    private fun turn(side: Int): Int =
+        when (side) {
+            PipeSides.TOP -> PipeSides.RIGHT
+            PipeSides.RIGHT -> PipeSides.BOTTOM
+            PipeSides.BOTTOM -> PipeSides.LEFT
+            else -> PipeSides.TOP
+        }
+
+    /** Returns the sides a mask names, so a test can compare them by name. */
+    private fun sidesOf(mask: Int): Set<Int> =
+        listOf(PipeSides.TOP, PipeSides.RIGHT, PipeSides.BOTTOM, PipeSides.LEFT)
+            .filter { mask and it != 0 }
+            .toSet()
+
+    @Test
+    fun a_bend_turns_a_quarter_turn_at_a_time() {
+        val bend = PipeArt.Shape.Bend
+        assertEquals("the bend's own sides", PipeSides.TOP or PipeSides.LEFT, bend.sides)
+        assertEquals(PipeSides.TOP or PipeSides.RIGHT, rotateSides(bend.sides, 1))
+        assertEquals(PipeSides.BOTTOM or PipeSides.RIGHT, rotateSides(bend.sides, 2))
+        assertEquals(PipeSides.BOTTOM or PipeSides.LEFT, rotateSides(bend.sides, 3))
     }
 
     @Test

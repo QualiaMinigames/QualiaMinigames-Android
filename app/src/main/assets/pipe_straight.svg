@@ -3,11 +3,15 @@
   <defs>
     <style>
       .cls-1{fill:#000000}
+      .cls-2{fill:#ffffff}
     </style>
   </defs>
   <title>Untitled-1</title>
   <g id="Layer_1" data-name="Layer 1">
     <path d="M7.65 0 L7.65 24 L9.65 24 L9.65 0 Z" class="cls-1"/>
     <path d="M14.35 0 L14.35 24 L16.35 24 L16.35 0 Z" class="cls-1"/>
+    <path d="M9.65 0 L14.35 0" class="cls-2"/>
+    <path d="M9.65 24 L14.35 24" class="cls-2"/>
+    <path d="M9.65 24 L9.65 0 L14.35 0 L14.35 24 Z" class="cls-2"/>
   </g>
 </svg>

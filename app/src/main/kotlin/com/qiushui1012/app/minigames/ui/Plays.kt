@@ -70,8 +70,23 @@ import androidx.compose.ui.res.stringResource
  */
 private val BoardTextDensity = Density(1f, 1f)
 
-/** The width of the board's frame, in board units. */
-private const val BOARD_FRAME = 0.03f
+/**
+ * The colour of the pipes board's lines, frame and cells alike.
+ *
+ * One colour for both is what makes the board read as a grid: the frame is the same line as the
+ * cells it closes, not a heavier border around them. It is a pale blue rather than the theme's
+ * ink because a pipe's walls are already ink, and a grid in the same colour would merge with the
+ * pieces it separates.
+ */
+private val BoardLine = Color(0xFFD0E2E7)
+
+/**
+ * The width of a board line, in board units.
+ *
+ * The frame and the cell dividers share it. At the widths a phone draws a board, a frame heavier
+ * than the cells would look like a picture frame; the same weight makes the grid one thing.
+ */
+private const val BOARD_LINE = 0.02f
 
 /** The width of a box divider, as a fraction of a cell. */
 private const val BOX_DIVIDER = 0.030f
@@ -152,18 +167,33 @@ fun PipesPlay(
                     afterMove()
                 },
                 content = { _ ->
-                    // Reading `revision` is what redraws the board after a move: the pieces
-                    // themselves are read from the rules object on every frame, and a frame
-                    // that did not read the revision would be cached.
                     @Suppress("UNUSED_EXPRESSION")
                     revision
-                    // The frame is drawn first, so a piece's rounded ends sit against a line
-                    // that closes the board rather than fading into the page.
+                    // The grid is drawn first, under the pieces: a wall covers the line it sits
+                    // on, so a grid drawn over the board would cut into every piece that reaches
+                    // an edge. The cell lines and the frame are one drawing at one width, which is
+                    // what makes the board read as a grid rather than as a picture with a border.
+                    for (line in 1 until size) {
+                        drawLine(
+                            color = BoardLine,
+                            start = Offset(line.toFloat(), 0f),
+                            end = Offset(line.toFloat(), size.toFloat()),
+                            strokeWidth = BOARD_LINE,
+                        )
+                        drawLine(
+                            color = BoardLine,
+                            start = Offset(0f, line.toFloat()),
+                            end = Offset(size.toFloat(), line.toFloat()),
+                            strokeWidth = BOARD_LINE,
+                        )
+                    }
+                    // The frame sits on the boundary itself rather than inside it, so its two
+                    // halves lie either side of the edge and the board ends where its pieces do.
                     drawRect(
-                        color = wall,
+                        color = BoardLine,
                         topLeft = Offset.Zero,
                         size = Size(size.toFloat(), size.toFloat()),
-                        style = Stroke(width = BOARD_FRAME),
+                        style = Stroke(width = BOARD_LINE),
                     )
                     for (row in 0 until size) {
                         for (column in 0 until size) {
