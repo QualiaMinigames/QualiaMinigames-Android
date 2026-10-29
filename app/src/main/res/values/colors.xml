@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The colors the platform needs before the composition is running: the window behind it, the
+  system bars over it, and the two tones the launcher icon is drawn in.
+
+  `plate` and `ink` are the mark's own two tones and have no night variant: the launcher icon
+  is drawn in them, and an icon that inverted itself would be a different mark.
+  `window_background` is the one that follows the system theme, and its night variant lives
+  in `values-night`.
+-->
+<resources>
+    <color name="plate">#FFEAF2F4</color>
+    <color name="ink">#FF091012</color>
+    <color name="window_background">@color/plate</color>
+    <color name="ic_launcher_background">@color/plate</color>
+</resources>

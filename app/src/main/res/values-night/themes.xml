@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The night variant of the window theme. The mark's two tones swap roles, so the bars' icons
+  have to be light for the same reason they are dark in the light theme.
+-->
+<resources>
+    <style name="Theme.QualiaMinigames" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:colorBackground">@color/window_background</item>
+    </style>
+</resources>

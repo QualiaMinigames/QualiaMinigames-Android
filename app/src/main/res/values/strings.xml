@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Default locale: English (United States).
+
+  Every key in this file is also present in `values-zh/strings.xml`; a translation that is
+  missing falls back to the text here, and a test fails when the two files disagree on their
+  key sets.
+
+  Placeholders follow the `%1$s` / `%1$d` form, so a translation may order them differently.
+-->
+<resources>
+    <string name="app_name">QualiaMinigames</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_records">Records</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Home -->
+    <string name="home_title">Games</string>
+    <string name="home_pipes_name">Pipes</string>
+    <string name="home_pipes_summary">%1$d × %1$d, %2$s</string>
+    <string name="home_sudoku_name">Sudoku</string>
+    <string name="home_sudoku_summary">%1$s</string>
+    <string name="home_can_continue">In progress</string>
+
+    <!-- Pipes -->
+    <string name="pipes_layout_flat">flat</string>
+    <string name="pipes_layout_wrapped">wrapped</string>
+    <string name="pipes_size">Size</string>
+    <string name="pipes_layout">Edges</string>
+    <string name="pipes_new_game">New game</string>
+    <string name="pipes_continue">Continue</string>
+    <string name="pipes_overwrite">Starting a new game discards the one in progress.</string>
+    <string name="pipes_unchanged">This board is already the way it starts.</string>
+    <string name="pipes_won">Solved</string>
+
+    <!-- Sudoku -->
+    <string name="sudoku_difficulty_easy">Easy</string>
+    <string name="sudoku_difficulty_medium">Medium</string>
+    <string name="sudoku_difficulty_hard">Hard</string>
+    <string name="sudoku_difficulty">Difficulty</string>
+    <string name="sudoku_new_game">New game</string>
+    <string name="sudoku_continue">Continue</string>
+    <string name="sudoku_overwrite">Starting a new game discards the one in progress.</string>
+    <string name="sudoku_notes">Notes</string>
+    <string name="sudoku_erase">Erase</string>
+    <string name="sudoku_won">Solved</string>
+
+    <!-- Play -->
+    <string name="play_undo">Undo</string>
+    <string name="play_back">Back</string>
+    <string name="play_time">%1$s</string>
+    <string name="play_player">Player: %1$s</string>
+
+    <!-- New game dialog -->
+    <string name="dialog_new_game_title">New game</string>
+    <string name="dialog_player_name">Player name</string>
+    <string name="dialog_player_name_hint">Leave empty to use the default</string>
+    <string name="dialog_start">Start</string>
+    <string name="dialog_cancel">Cancel</string>
+    <string name="dialog_replace_save">A game is in progress. Starting a new one discards it.</string>
+    <string name="dialog_replace_confirm">Discard and start</string>
+
+    <!-- Records -->
+    <string name="records_title">Records</string>
+    <string name="records_empty">Nothing recorded yet.</string>
+    <string name="records_best">Best</string>
+    <string name="records_history">History</string>
+    <string name="records_select">Select</string>
+    <string name="records_select_all">Select all</string>
+    <string name="records_clear_selection">Clear</string>
+    <string name="records_export">Export</string>
+    <string name="records_delete">Delete</string>
+    <string name="records_delete_confirm">Delete the selected records?</string>
+    <string name="records_delete_all">Delete all</string>
+    <string name="records_delete_all_confirm">Delete every record? This cannot be undone.</string>
+    <string name="records_export_done">Saved to %1$s</string>
+    <string name="records_export_share">Share</string>
+    <string name="records_export_failed">The image could not be saved.</string>
+    <string name="records_time_columns">Player, Game, Time, Finished</string>
+    <string name="records_exported_at">Exported %1$s</string>
+    <string name="records_unknown_player">Unnamed</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_player">Default player name</string>
+    <string name="settings_player_hint">Used when a game starts without a name</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_language_system">Follow the system</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_system">Follow the system</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_sound">Sound</string>
+    <string name="settings_sound_explainer">A short tone when a piece turns or a digit lands.</string>
+    <string name="settings_haptics">Haptics</string>
+    <string name="settings_haptics_explainer">A short vibration on the same actions.</string>
+    <string name="settings_about">About</string>
+    <string name="settings_version">Version</string>
+    <string name="settings_core_version">Rules version</string>
+    <string name="settings_license">License</string>
+    <string name="settings_license_value">Apache-2.0</string>
+    <string name="settings_repository">Repository</string>
+
+    <!-- Shared -->
+    <string name="action_close">Close</string>
+    <string name="action_save">Save</string>
+    <string name="cd_pipes_board">Pipes board</string>
+    <string name="cd_sudoku_board">Sudoku board</string>
+    <string name="cd_zoom_in">Zoom in</string>
+    <string name="cd_zoom_out">Zoom out</string>
+    <string name="cd_reset_zoom">Reset the view</string>
+    <string name="cell_pipes">Row %1$d, column %2$d</string>
+    <string name="cell_sudoku">Row %1$d, column %2$d, %3$s</string>
+    <string name="cell_empty">empty</string>
+    <string name="cell_given">given %1$d</string>
+    <string name="cell_value">%1$d</string>
+</resources>

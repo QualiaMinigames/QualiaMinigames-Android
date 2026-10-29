@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The paths the application hands out through a content URI, for the one case the media store
+  cannot serve: an image written to the application's own pictures directory on Android 9 and
+  lower. A share sheet receives a URI and not a path, so the file has to be reachable through
+  the provider even though it lives in the application's own storage.
+-->
+<paths>
+    <external-files-path
+        name="pictures"
+        path="Pictures/" />
+</paths>

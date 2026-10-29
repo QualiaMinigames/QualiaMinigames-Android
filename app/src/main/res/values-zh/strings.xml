@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Chinese translation. The key set must match `values/strings.xml` exactly, which a test
+  checks: a key added to one file and forgotten in the other would fall back silently, and
+  the fallback is only correct for a language a reader may not want.
+-->
+<resources>
+    <string name="app_name">QualiaMinigames</string>
+
+    <string name="nav_home">主页</string>
+    <string name="nav_records">记录</string>
+    <string name="nav_settings">设置</string>
+
+    <string name="home_title">游戏</string>
+    <string name="home_pipes_name">接水管</string>
+    <string name="home_pipes_summary">%1$d × %1$d，%2$s</string>
+    <string name="home_sudoku_name">数独</string>
+    <string name="home_sudoku_summary">%1$s</string>
+    <string name="home_can_continue">进行中</string>
+
+    <string name="pipes_layout_flat">平边</string>
+    <string name="pipes_layout_wrapped">跨边</string>
+    <string name="pipes_size">尺寸</string>
+    <string name="pipes_layout">边缘</string>
+    <string name="pipes_new_game">新对局</string>
+    <string name="pipes_continue">继续</string>
+    <string name="pipes_overwrite">开始新对局会丢弃进行中的这一局。</string>
+    <string name="pipes_unchanged">这局棋盘本来就处于初始状态。</string>
+    <string name="pipes_won">已完成</string>
+
+    <string name="sudoku_difficulty_easy">简单</string>
+    <string name="sudoku_difficulty_medium">中等</string>
+    <string name="sudoku_difficulty_hard">困难</string>
+    <string name="sudoku_difficulty">难度</string>
+    <string name="sudoku_new_game">新对局</string>
+    <string name="sudoku_continue">继续</string>
+    <string name="sudoku_overwrite">开始新对局会丢弃进行中的这一局。</string>
+    <string name="sudoku_notes">笔记</string>
+    <string name="sudoku_erase">清除</string>
+    <string name="sudoku_won">已完成</string>
+
+    <string name="play_undo">撤销</string>
+    <string name="play_back">返回</string>
+    <string name="play_time">%1$s</string>
+    <string name="play_player">玩家：%1$s</string>
+
+    <string name="dialog_new_game_title">新对局</string>
+    <string name="dialog_player_name">玩家名</string>
+    <string name="dialog_player_name_hint">留空则使用默认玩家名</string>
+    <string name="dialog_start">开始</string>
+    <string name="dialog_cancel">取消</string>
+    <string name="dialog_replace_save">已有进行中的对局，开始新对局会丢弃它。</string>
+    <string name="dialog_replace_confirm">丢弃并开始</string>
+
+    <string name="records_title">记录</string>
+    <string name="records_empty">还没有任何记录。</string>
+    <string name="records_best">最佳</string>
+    <string name="records_history">历史</string>
+    <string name="records_select">选择</string>
+    <string name="records_select_all">全选</string>
+    <string name="records_clear_selection">取消选择</string>
+    <string name="records_export">导出</string>
+    <string name="records_delete">删除</string>
+    <string name="records_delete_confirm">删除选中的记录？</string>
+    <string name="records_delete_all">清空</string>
+    <string name="records_delete_all_confirm">清空全部记录？此操作无法撤销。</string>
+    <string name="records_export_done">已保存到 %1$s</string>
+    <string name="records_export_share">分享</string>
+    <string name="records_export_failed">图片保存失败。</string>
+    <string name="records_time_columns">玩家、游戏、用时、完成时间</string>
+    <string name="records_exported_at">导出时间 %1$s</string>
+    <string name="records_unknown_player">未命名</string>
+
+    <string name="settings_title">设置</string>
+    <string name="settings_player">默认玩家名</string>
+    <string name="settings_player_hint">开局时未填玩家名则使用它</string>
+    <string name="settings_language">语言</string>
+    <string name="settings_language_system">跟随系统</string>
+    <string name="settings_theme">主题</string>
+    <string name="settings_theme_system">跟随系统</string>
+    <string name="settings_theme_light">浅色</string>
+    <string name="settings_theme_dark">深色</string>
+    <string name="settings_sound">音效</string>
+    <string name="settings_sound_explainer">旋转水管或落子时播放一声短音。</string>
+    <string name="settings_haptics">震动</string>
+    <string name="settings_haptics_explainer">同样的操作伴随一次短促震动。</string>
+    <string name="settings_about">关于</string>
+    <string name="settings_version">版本</string>
+    <string name="settings_core_version">规则版本</string>
+    <string name="settings_license">许可证</string>
+    <string name="settings_license_value">Apache-2.0</string>
+    <string name="settings_repository">仓库</string>
+
+    <string name="action_close">关闭</string>
+    <string name="action_save">保存</string>
+    <string name="cd_pipes_board">接水管棋盘</string>
+    <string name="cd_sudoku_board">数独棋盘</string>
+    <string name="cd_zoom_in">放大</string>
+    <string name="cd_zoom_out">缩小</string>
+    <string name="cd_reset_zoom">复位视图</string>
+    <string name="cell_pipes">第 %1$d 行，第 %2$d 列</string>
+    <string name="cell_sudoku">第 %1$d 行，第 %2$d 列，%3$s</string>
+    <string name="cell_empty">空</string>
+    <string name="cell_given">给定 %1$d</string>
+    <string name="cell_value">%1$d</string>
+</resources>

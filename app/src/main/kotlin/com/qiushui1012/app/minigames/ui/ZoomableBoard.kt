@@ -1,0 +1,372 @@
+// Copyright (C) 2026 QualiaMinigames contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.qiushui1012.app.minigames.ui
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.math.max
+import kotlin.math.min
+
+/**
+ * A board that can be moved and zoomed, and the shadow that says there is more in a direction.
+ *
+ * # One scale, computed once
+ *
+ * The board has a fixed size in board units and is drawn at `fit × zoom`, where `fit` is the
+ * factor that makes it exactly fit the view. Hit testing, the pan limits and the shadow all
+ * read that one product, so a tap and a drawn cell cannot disagree.
+ *
+ * # One gesture loop, not three
+ *
+ * A tap, a long press, a pinch and a drag are recognised by a single loop rather than by three
+ * `detect…Gestures` helpers stacked on one modifier. Stacked detectors compete for the same
+ * pointer: the drag detector consumes the movement of every down, and the tap detector then
+ * never sees an up it may report. The loop here decides what a gesture is from how many
+ * pointers it has and how far they moved, which is the only way the four can coexist.
+ *
+ * # The edge shadow
+ *
+ * When the drawn board is wider or taller than the view and its edge is not against the
+ * corresponding edge of the view, a translucent band is drawn along that side of the view. Its
+ * opacity is one constant: it says "there is more in this direction", and a band whose
+ * strength grew with the hidden distance would become a second thing to read on top of a board
+ * that is already dense. A side with nothing hidden draws nothing.
+ */
+@Composable
+fun ZoomableBoard(
+    /** The board's size in board units, which is also its size at scale 1. */
+    boardWidth: Float,
+    boardHeight: Float,
+    /** The narrowest a cell may be drawn, in dp, which sets the largest zoom. */
+    minCellDp: Float,
+    /** The number of cells across, which is what a tap is converted to. */
+    columns: Int,
+    /** The number of cells down. */
+    rows: Int,
+    /** Draws the board, given the scale to draw it at. */
+    content: DrawScope.(scale: Float) -> Unit,
+    modifier: Modifier = Modifier,
+    /** Called with the cell under a tap. */
+    onTap: (row: Int, column: Int) -> Unit = { _, _ -> },
+    /** Called with the cell under a long press. */
+    onLongPress: (row: Int, column: Int) -> Unit = { _, _ -> },
+    /** Called when the view is reset, which a double tap does. */
+    onDoubleTap: () -> Unit = {},
+) {
+    val density = LocalDensity.current
+    // Read outside the canvas: a DrawScope is not a composable scope, so a theme value has to
+    // be taken here and closed over.
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    var view by remember { mutableStateOf(IntSize.Zero) }
+    var zoom by remember { mutableStateOf(1f) }
+    var pan by remember { mutableStateOf(Offset.Zero) }
+
+    // The gesture loop is keyed on the board's shape alone, so it is not restarted on every
+    // zoom step. The values it reads are therefore held in state that the loop reads afresh.
+    val currentZoom by rememberUpdatedState(zoom)
+    val currentPan by rememberUpdatedState(pan)
+    val tapHandler by rememberUpdatedState(onTap)
+    val pressHandler by rememberUpdatedState(onLongPress)
+    val doubleTapHandler by rememberUpdatedState(onDoubleTap)
+
+    val fit =
+        if (view.width == 0 || boardWidth == 0f) {
+            1f
+        } else {
+            min(view.width / boardWidth, view.height / boardHeight)
+        }
+    val minZoom = 1f
+    val maxZoom =
+        if (boardWidth == 0f) {
+            1f
+        } else {
+            // The scale at which one cell is `minCellDp` wide, divided by the fit scale, which
+            // is what the zoom multiplier has to reach.
+            val cellAtOne = boardWidth / columns
+            val needed = minCellDp * density.density / cellAtOne
+            max(minZoom, needed / fit)
+        }
+
+    Box(
+        modifier =
+            modifier
+                .fillMaxSize()
+                // The size of the box is what drawing and hit testing both measure against.
+                .onSizeChanged { view = it }
+                .pointerInput(boardWidth, boardHeight, rows, columns) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val startedAt = down.position
+                        var last = startedAt
+                        var moved = false
+                        var pointerCount = 1
+                        var zooming = false
+
+                        // A long press is the same gesture as a tap until it has lasted long
+                        // enough to be one; the time is bounded rather than awaited forever so
+                        // that a drag can still start from the same down.
+                        val longPress =
+                            withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Main)
+                                    val pressed = event.changes.filter { it.pressed }
+                                    if (pressed.isEmpty()) {
+                                        return@withTimeoutOrNull false
+                                    }
+                                    pointerCount = pressed.size
+                                    if (pointerCount > 1) {
+                                        zooming = true
+                                    }
+                                    last = event.calculateCentroid(useCurrent = true) ?: last
+                                    if (zooming || event.calculateZoom() != 1f) {
+                                        return@withTimeoutOrNull false
+                                    }
+                                    if ((event.changes.first().position - startedAt).getDistance() >
+                                        viewConfiguration.touchSlop
+                                    ) {
+                                        moved = true
+                                        return@withTimeoutOrNull false
+                                    }
+                                }
+                                @Suppress("UNREACHABLE_CODE")
+                                false
+                            }
+
+                        if (longPress == true) {
+                            cellAt(startedAt, view, boardWidth, boardHeight, currentZoom, currentPan, rows, columns)
+                                ?.let { (row, column) -> pressHandler(row, column) }
+                            // The long press has been reported; the up that follows must not
+                            // also be reported as a tap.
+                            while (awaitPointerEvent(PointerEventPass.Main).changes.any { it.pressed }) {
+                                // Drain the rest of the gesture.
+                            }
+                            return@awaitEachGesture
+                        }
+
+                        // From here the gesture is a drag, a pinch, or a tap.
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Main)
+                            val pressed = event.changes.filter { it.pressed }
+                            if (pressed.isEmpty()) {
+                                break
+                            }
+                            pointerCount = pressed.size
+                            val zoomChange = event.calculateZoom()
+                            val panChange = event.calculatePan()
+                            val centroid = event.calculateCentroid(useCurrent = false)
+                            if (zoomChange != 1f || panChange != Offset.Zero) {
+                                moved = true
+                            }
+                            if (pointerCount > 1 || zoomChange != 1f) {
+                                val next = (currentZoom * zoomChange).coerceIn(minZoom, maxZoom)
+                                val scaleChange = next / currentZoom
+                                val base = centroid ?: last
+                                val newPan =
+                                    currentPan + panChange + (currentPan - base) * (scaleChange - 1f)
+                                pan =
+                                    clampPan(
+                                        newPan,
+                                        view,
+                                        boardWidth * fit * next,
+                                        boardHeight * fit * next,
+                                    )
+                                zoom = next
+                            } else if (panChange != Offset.Zero) {
+                                pan =
+                                    clampPan(
+                                        currentPan + panChange,
+                                        view,
+                                        boardWidth * fit * currentZoom,
+                                        boardHeight * fit * currentZoom,
+                                    )
+                            }
+                            event.changes.forEach { it.consume() }
+                        }
+
+                        if (!moved && pointerCount == 1) {
+                            cellAt(startedAt, view, boardWidth, boardHeight, currentZoom, currentPan, rows, columns)
+                                ?.let { (row, column) -> tapHandler(row, column) }
+                        }
+                    }
+                }
+                // A double tap resets the view. It is its own detector because recognising it
+                // needs the time between two gestures, which the loop above has already
+                // forgotten by the time the second one starts.
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onDoubleTap = {
+                            pan = Offset.Zero
+                            zoom = minZoom
+                            doubleTapHandler()
+                        },
+                    )
+                },
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            if (view.width == 0 || boardWidth == 0f) {
+                return@Canvas
+            }
+            val scale = fit * zoom
+            val originX = (size.width - boardWidth * scale) / 2f + pan.x
+            val originY = (size.height - boardHeight * scale) / 2f + pan.y
+
+            withTransform({
+                translate(originX, originY)
+                scale(scale, scale, pivot = Offset.Zero)
+            }) {
+                content(scale)
+            }
+
+            drawEdgeShadows(
+                originX = originX,
+                originY = originY,
+                drawnWidth = boardWidth * scale,
+                drawnHeight = boardHeight * scale,
+                color = if (isDark) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.12f),
+                thickness = SHADOW_DP.dp.toPx(),
+            )
+        }
+    }
+}
+
+/** How wide the edge shadow is, in dp. */
+private const val SHADOW_DP = 28f
+
+/** How far the drawn board may be moved before a side is pinned to the view. */
+private fun clampPan(
+    pan: Offset,
+    view: IntSize,
+    drawnWidth: Float,
+    drawnHeight: Float,
+): Offset {
+    // A board smaller than the view stays centred; one larger may be moved until its own edges
+    // reach the view's.
+    val maxX = max(0f, (drawnWidth - view.width) / 2f)
+    val maxY = max(0f, (drawnHeight - view.height) / 2f)
+    return Offset(pan.x.coerceIn(-maxX, maxX), pan.y.coerceIn(-maxY, maxY))
+}
+
+/** Draws a band along every side of the view whose board edge is hidden behind it. */
+private fun DrawScope.drawEdgeShadows(
+    originX: Float,
+    originY: Float,
+    drawnWidth: Float,
+    drawnHeight: Float,
+    color: Color,
+    thickness: Float,
+) {
+    val right = originX + drawnWidth
+    val bottom = originY + drawnHeight
+    // A pixel of slack: a board that fits exactly lands on the edge with a rounding error, and
+    // a shadow that flickers on at every resize is worse than none.
+    val slack = 1f
+
+    if (originX < -slack) {
+        drawRect(
+            brush = Brush.horizontalGradient(listOf(color, Color.Transparent), startX = 0f, endX = thickness),
+            topLeft = Offset.Zero,
+            size = Size(thickness, size.height),
+        )
+    }
+    if (originY < -slack) {
+        drawRect(
+            brush = Brush.verticalGradient(listOf(color, Color.Transparent), startY = 0f, endY = thickness),
+            topLeft = Offset.Zero,
+            size = Size(size.width, thickness),
+        )
+    }
+    if (right > size.width + slack) {
+        drawRect(
+            brush =
+                Brush.horizontalGradient(
+                    listOf(Color.Transparent, color),
+                    startX = size.width - thickness,
+                    endX = size.width,
+                ),
+            topLeft = Offset(size.width - thickness, 0f),
+            size = Size(thickness, size.height),
+        )
+    }
+    if (bottom > size.height + slack) {
+        drawRect(
+            brush =
+                Brush.verticalGradient(
+                    listOf(Color.Transparent, color),
+                    startY = size.height - thickness,
+                    endY = size.height,
+                ),
+            topLeft = Offset(0f, size.height - thickness),
+            size = Size(size.width, thickness),
+        )
+    }
+}
+
+/** Returns the cell a point falls in, or null when it misses the board. */
+private fun cellAt(
+    position: Offset,
+    view: IntSize,
+    boardWidth: Float,
+    boardHeight: Float,
+    zoom: Float,
+    pan: Offset,
+    rows: Int,
+    columns: Int,
+): Pair<Int, Int>? {
+    if (view.width == 0 || boardWidth == 0f) {
+        return null
+    }
+    val fit = min(view.width / boardWidth, view.height / boardHeight)
+    val scale = fit * zoom
+    val originX = (view.width - boardWidth * scale) / 2f + pan.x
+    val originY = (view.height - boardHeight * scale) / 2f + pan.y
+    val cellWidth = boardWidth * scale / columns
+    val cellHeight = boardHeight * scale / rows
+    val column = ((position.x - originX) / cellWidth).toInt()
+    val row = ((position.y - originY) / cellHeight).toInt()
+    if (column !in 0 until columns || row !in 0 until rows) {
+        return null
+    }
+    return row to column
+}

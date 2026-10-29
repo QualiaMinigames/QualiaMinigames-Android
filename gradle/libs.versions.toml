@@ -1,0 +1,67 @@
+# Copyright (C) 2026 QualiaMinigames contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Versions are pinned deliberately. The Android Gradle plugin caps `compileSdk`, and the
+# Kotlin release is the one that plugin line was tested against; moving either on its own
+# gives a build that fails while the Android plugin is being applied.
+#
+# The UniFFI line is the one the binding crate was built and tested with. The generated
+# Kotlin and the Rust library that answers it are two halves of one protocol, so the two
+# versions move together.
+
+[versions]
+kotlin = "2.1.21"
+androidGradlePlugin = "8.7.3"
+composeBom = "2025.04.01"
+androidxActivity = "1.9.3"
+androidxLifecycle = "2.8.5"
+androidxCore = "1.13.1"
+jna = "5.18.1"
+kotlinxCoroutines = "1.9.0"
+kotlinxSerialization = "1.7.3"
+androidxDataStore = "1.1.1"
+kotlinxDatetime = "0.6.0"
+junit = "4.13.2"
+robolectric = "4.14.1"
+
+[libraries]
+androidxActivityCompose = { module = "androidx.activity:activity-compose", version.ref = "androidxActivity" }
+androidxCoreKtx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
+androidxDatastorePreferences = { module = "androidx.datastore:datastore-preferences", version.ref = "androidxDataStore" }
+androidxLifecycleRuntimeCompose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidxLifecycle" }
+androidxLifecycleViewmodelCompose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidxLifecycle" }
+androidxDataStorePreferences = { module = "androidx.datastore:datastore-preferences", version.ref = "androidxDataStore" }
+composeBom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
+composeFoundation = { module = "androidx.compose.foundation:foundation" }
+composeMaterial3 = { module = "androidx.compose.material3:material3" }
+composeMaterialIcons = { module = "androidx.compose.material:material-icons-core" }
+composeUi = { module = "androidx.compose.ui:ui" }
+composeUiGraphics = { module = "androidx.compose.ui:ui-graphics" }
+composeUiToolingPreview = { module = "androidx.compose.ui:ui-tooling-preview" }
+composeUiTooling = { module = "androidx.compose.ui:ui-tooling" }
+composeUiTestJunit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+composeUiTestManifest = { module = "androidx.compose.ui:ui-test-manifest" }
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
+kotlinxCoroutinesAndroid = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
+kotlinxCoroutinesTest = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
+kotlinxDatetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
+kotlinxSerializationJson = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+junit = { module = "junit:junit", version.ref = "junit" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+
+[plugins]
+androidApplication = { id = "com.android.application", version.ref = "androidGradlePlugin" }
+kotlinAndroid = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlinComposeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

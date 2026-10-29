@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The application's manifest.
+
+  No permission is asked for: nothing here reaches the network, the camera or the local
+  network, and the only data the application writes is its own save file. The export of a
+  record is a file the user chooses the destination of, which the platform's document picker
+  and media store handle without a storage permission of the application's own on the
+  versions this supports.
+
+  `allowBackup` is false for the same reason: a save is a file in this application's own
+  storage, and the way it leaves is the export the user asks for.
+
+  The activity handles its own configuration changes, because a rotation must not throw away
+  the game in progress: the board is rebuilt from the composition, and the Rust object behind
+  it would otherwise be destroyed with the activity.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:name=".MinigamesApplication"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.QualiaMinigames">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|uiMode"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.QualiaMinigames">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <!--
+          The provider the older export path hands a file through. It is not exported: the
+          only thing that ever reads from it is a share sheet the player opened.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+
+</manifest>

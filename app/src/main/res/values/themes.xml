@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The window the composition is drawn in. There is no action bar: every piece of navigation
+  belongs to the interface itself.
+
+  The background is the plate, so the moment between the launcher and the first frame is the
+  color of the application rather than a flash of white. It is also what shows behind the
+  system bars while the composition keeps clear of them.
+
+  The bars' icons are asked to be dark here and light in the night variant, which is the one
+  thing the platform has to be told rather than shown.
+-->
+<resources>
+    <style name="Theme.QualiaMinigames" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:colorBackground">@color/window_background</item>
+    </style>
+</resources>
