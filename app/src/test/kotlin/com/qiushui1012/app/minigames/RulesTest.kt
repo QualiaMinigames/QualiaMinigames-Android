@@ -14,6 +14,7 @@
 
 package com.qiushui1012.app.minigames
 
+import com.qiushui1012.app.minigames.data.GameKind
 import com.qiushui1012.app.minigames.data.Record
 import com.qiushui1012.app.minigames.data.RecordKey
 import com.qiushui1012.app.minigames.rules.PipesLayout
@@ -21,6 +22,7 @@ import com.qiushui1012.app.minigames.rules.Rules
 import com.qiushui1012.app.minigames.rules.SudokuDifficulty
 import com.qiushui1012.app.minigames.ui.formatDuration
 import com.qiushui1012.app.minigames.ui.groupRecords
+import com.qiushui1012.app.minigames.ui.recordsByKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -161,6 +163,23 @@ class RecordsGroupingTest {
         val records = listOf(pipes(9, false, 10), pipes(9, false, 20), sudoku("easy", 30))
         val groups = groupRecords(records)
         assertEquals(records.size, groups.sumOf { it.second.size })
+    }
+
+    @Test
+    fun records_are_split_by_game_before_they_are_split_by_parameters() {
+        val records =
+            listOf(
+                sudoku("hard", 10),
+                pipes(15, false, 10),
+                sudoku("easy", 10),
+                pipes(9, true, 10),
+            )
+        val byKind = recordsByKind(records)
+        assertEquals(listOf(GameKind.Pipes, GameKind.Sudoku), byKind.map { it.first })
+        assertEquals(2, byKind[0].second.size)
+        assertEquals(2, byKind[1].second.size)
+        // A game with no records has no group, so the page draws no empty dropdown for it.
+        assertEquals(listOf(GameKind.Sudoku), recordsByKind(listOf(sudoku("easy", 1))).map { it.first })
     }
 
     @Test

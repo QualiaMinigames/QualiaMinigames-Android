@@ -14,6 +14,7 @@
 
 package com.qiushui1012.app.minigames.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -29,14 +30,17 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -47,8 +51,9 @@ import com.qiushui1012.app.minigames.GameInProgress
 import com.qiushui1012.app.minigames.R
 import com.qiushui1012.app.minigames.Space
 import com.qiushui1012.app.minigames.Tab
+import com.qiushui1012.app.minigames.data.GameKind
 import com.qiushui1012.app.minigames.data.Settings
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 
 /** How much room the bottom navigation takes, which a scrolling page leaves at its end. */
 private val BottomNavigationInset = 84.dp
@@ -57,7 +62,7 @@ private val BottomNavigationInset = 84.dp
 private val SideRailWidth = 96.dp
 
 /**
- * The three pages and the navigation between them.
+ * The three pages, the navigation between them, and the dialogs that sit above both.
  *
  * The navigation is an island rather than an edge-to-edge bar: in a window wider than it is
  * tall it stands on the left and the content is laid out beside it; in a portrait window it
@@ -66,6 +71,13 @@ private val SideRailWidth = 96.dp
  *
  * The content lives in the same row slot in both arrangements, which is what keeps a page's
  * state alive when the window changes shape.
+ *
+ * # Why the shell holds the dialog
+ *
+ * The dialog covers the navigation, and only something drawn above the navigation can do
+ * that. The shell is also where a back press is handled: while a dialog is open, back closes
+ * it and nothing else, which is what a player expects from a question they have opened and
+ * can see.
  */
 @Composable
 fun MainShell(
@@ -75,33 +87,78 @@ fun MainShell(
     onSelectTab: (Tab) -> Unit,
     onStartGame: (GameInProgress) -> Unit,
 ) {
-    BoxWithConstraints(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-        val side = maxWidth > maxHeight
-        Row(modifier = Modifier.fillMaxSize()) {
-            Box(Modifier.width(if (side) SideRailWidth else 0.dp))
-            Box(modifier = Modifier.weight(1f)) {
-                when (tab) {
-                    Tab.Home -> HomeScreen(container, settings, onStartGame)
-                    Tab.Records -> RecordsScreen(container, settings, bottomInset = if (side) 0.dp else BottomNavigationInset)
-                    Tab.Settings -> SettingsScreen(container, settings, bottomInset = if (side) 0.dp else BottomNavigationInset)
+    var dialog by remember { mutableStateOf<ShellDialog?>(null) }
+    val open = dialog
+    BackHandler(enabled = open != null) { dialog = null }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+            val side = maxWidth > maxHeight
+            Row(modifier = Modifier.fillMaxSize()) {
+                Box(Modifier.width(if (side) SideRailWidth else 0.dp))
+                Box(modifier = Modifier.weight(1f)) {
+                    when (tab) {
+                        Tab.Home ->
+                            HomeScreen(
+                                container = container,
+                                settings = settings,
+                                onContinue = onStartGame,
+                                onNewGame = { kind -> dialog = ShellDialog.NewGame(kind) },
+                                onDiscard = { kind -> dialog = ShellDialog.DiscardSave(kind) },
+                            )
+
+                        Tab.Records ->
+                            RecordsScreen(
+                                container = container,
+                                bottomInset = if (side) 0.dp else BottomNavigationInset,
+                                onRequestDialog = { dialog = it },
+                            )
+
+                        Tab.Settings ->
+                            SettingsScreen(
+                                container = container,
+                                settings = settings,
+                                bottomInset = if (side) 0.dp else BottomNavigationInset,
+                            )
+                    }
                 }
             }
+            NavigationIsland(
+                tab = tab,
+                onSelect = onSelectTab,
+                vertical = side,
+                modifier =
+                    if (side) {
+                        Modifier.align(Alignment.TopStart).padding(start = Space.m, top = Space.xl).width(SideRailWidth - Space.m * 2)
+                    } else {
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(horizontal = Space.l, vertical = Space.m)
+                            .widthIn(max = 420.dp)
+                            .fillMaxWidth()
+                    },
+            )
         }
-        NavigationIsland(
-            tab = tab,
-            onSelect = onSelectTab,
-            vertical = side,
-            modifier =
-                if (side) {
-                    Modifier.align(Alignment.TopStart).padding(start = Space.m, top = Space.xl).width(SideRailWidth - Space.m * 2)
-                } else {
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(horizontal = Space.l, vertical = Space.m)
-                        .widthIn(max = 420.dp)
-                        .fillMaxWidth()
+
+        // The dialog is outside the safe-area padding, so its scrim covers the window edge to
+        // edge — the status bar's strip included — and its sheet is still kept clear of the
+        // system bars by its own inset padding.
+        open?.let { shown ->
+            ShellDialogContent(
+                dialog = shown,
+                container = container,
+                settings = settings,
+                onDismiss = { dialog = null },
+                onStartGame = { game ->
+                    dialog = null
+                    onStartGame(game)
                 },
-        )
+                onDiscardConfirmed = { kind ->
+                    container.scope.launch { container.records.clearSave(kind) }
+                    dialog = ShellDialog.NewGame(kind)
+                },
+            )
+        }
     }
 }
 
@@ -219,7 +276,7 @@ private fun navigationLabel(tab: Tab): String =
 private fun navigationIcon(tab: Tab): ImageVector =
     when (tab) {
         Tab.Home -> Icons.Filled.Home
-        Tab.Records -> Icons.Filled.List
+        Tab.Records -> Icons.AutoMirrored.Filled.List
         Tab.Settings -> Icons.Filled.Settings
     }
 

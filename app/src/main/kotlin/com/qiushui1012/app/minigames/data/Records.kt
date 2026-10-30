@@ -53,6 +53,15 @@ data class Record(
     val seconds: Long,
     /** When it finished, as milliseconds since the Unix epoch. */
     val finishedAt: Long,
+    /**
+     * The seed the puzzle was generated from, or null for a record written before seeds were
+     * kept.
+     *
+     * The seed is what makes a finished game reproducible, and it is deliberately not part of
+     * [RecordKey]: two games on the same board are the same group, and a seed per record would
+     * split that group into one group per puzzle.
+     */
+    val seed: Long? = null,
 ) {
     /**
      * Returns a stable identifier for this record.

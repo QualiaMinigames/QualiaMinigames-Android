@@ -15,6 +15,7 @@
 package com.qiushui1012.app.minigames
 
 import androidx.datastore.core.DataStore
+import android.graphics.Typeface
 import com.qiushui1012.app.minigames.data.GameKind
 import com.qiushui1012.app.minigames.data.Record
 import com.qiushui1012.app.minigames.data.RecordKey
@@ -159,6 +160,20 @@ class GameFlowTest {
     }
 
     @Test
+    fun the_seed_of_a_game_survives_its_save_and_reaches_its_record() {
+        // A record keeps the seed so that a finished puzzle can be identified afterwards. The
+        // seed travels through the snapshot, which is what a saved game is, and the record is
+        // built from the game the player was in.
+        val board = requireNotNull(Rules.newPipes(6, PipesLayout.Flat, 0x5EED))
+        val save = SavedGame(GameKind.Pipes, board.toSnapshot(), "QiuShui", 9, 1_000)
+        val resumed = requireNotNull(restoreGame(save)) as GameInProgress.Pipes
+        assertEquals(board.seed, resumed.seed)
+
+        val record = Record(resumed.key, resumed.playerName, 9, 2_000, seed = resumed.seed)
+        assertEquals(0x5EEDL, record.seed)
+    }
+
+    @Test
     fun a_saved_sudoku_is_restored_with_its_difficulty_and_its_notes() = runBlocking {
         val board = Rules.newSudoku(SudokuDifficulty.Hard, 31)
         val empty = (0 until Rules.SUDOKU_CELLS).first { !board.isGiven(it) }
@@ -173,13 +188,25 @@ class GameFlowTest {
 
     @Test
     fun the_record_of_a_finished_game_export_to_an_image() {
-        val record = Record(RecordKey.Pipes(9, wrapped = false), "QiuShui", 125, 1_700_000_000_000)
-        val label: (RecordKey) -> String = { key -> key.toString() }
-        val single = RecordImage.single(record, label, "Unnamed", "exported")
+        val record = Record(RecordKey.Pipes(9, wrapped = false), "QiuShui", 125, 1_700_000_000_000, seed = 7)
+        val name: (RecordKey) -> String = { "Pipes" }
+        val params: (RecordKey) -> String = { key -> key.toString() }
+        val single = RecordImage.single(record, name, params, "Unnamed", "exported", Typeface.MONOSPACE)
         assertEquals(RecordImage.width(), single.width)
         assertTrue(single.height > 0)
 
-        val several = RecordImage.several(List(3) { record }, label, "Unnamed", "exported", listOf("Player", "Game", "Time", "Finished"))
-        assertEquals(RecordImage.severalHeight(3), several.height)
+        val several =
+            RecordImage.several(
+                List(3) { record },
+                name,
+                params,
+                "Unnamed",
+                "exported",
+                "Play records",
+                listOf("Player", "Game", "Time", "Finished"),
+                Typeface.MONOSPACE,
+            )
+        assertTrue(several.width > 0)
+        assertTrue(several.height > 0)
     }
 }

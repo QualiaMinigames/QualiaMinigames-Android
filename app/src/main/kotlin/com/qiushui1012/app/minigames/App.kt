@@ -92,8 +92,7 @@ fun App(container: AppContainer) {
                             game = shown.game,
                             onExit = { screen = Screen.Main(Tab.Home) },
                             onFinished = { screen = Screen.Main(Tab.Records) },
-                        )
-                }
+                        )                }
             }
         }
     }

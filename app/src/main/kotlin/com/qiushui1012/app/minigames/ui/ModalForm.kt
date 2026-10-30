@@ -24,7 +24,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -52,16 +55,29 @@ import com.qiushui1012.app.minigames.Space
  * created in. Covering the page inside the same composition keeps one locale for everything,
  * one theme, and one place where a back press is handled.
  *
+ * # What it covers
+ *
+ * The form covers the whole window, navigation included. It is drawn by the shell above both
+ * the page and the navigation island, and its scrim is what takes every tap, so the navigation
+ * behind it is neither visible as available nor reachable: a dialog is a question, and a page
+ * tab is not an answer to it.
+ *
+ * The scrim is laid down edge to edge, over the strip the status bar occupies, but the form
+ * itself keeps clear of the system bars: the page behind it is dimmed from the very top of the
+ * window, and the card still ends above the gesture bar.
+ *
  * A click outside the card does nothing. The card is a form, and a form is not something a
  * stray tap should discard; the ways out are the buttons, and they say what they do.
+ *
+ * [dismissLabel] is the label of the secondary button; a null label leaves the confirm button
+ * as the only way out, which is what a dialog that only has to be read wants.
  */
 @Composable
 fun ModalForm(
     title: String,
     onDismiss: () -> Unit,
     confirm: @Composable () -> Unit,
-    dismissLabel: String = stringResource(R.string.dialog_cancel),
-    secondary: (@Composable () -> Unit)? = null,
+    dismissLabel: String? = stringResource(R.string.dialog_cancel),
     content: @Composable () -> Unit,
 ) {
     Box(
@@ -78,7 +94,12 @@ fun ModalForm(
     ) {
         ShadowedSurface(
             shape = MaterialTheme.shapes.extraLarge,
-            modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(horizontal = Space.l, vertical = Space.xl),
+            modifier =
+                Modifier
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .widthIn(max = 560.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = Space.l, vertical = Space.xl),
         ) {
             Surface(
                 shape = MaterialTheme.shapes.extraLarge,
@@ -102,9 +123,10 @@ fun ModalForm(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(Space.s),
                     ) {
-                        secondary?.invoke()
                         Box(Modifier.weight(1f))
-                        TextButton(onClick = onDismiss) { Text(dismissLabel) }
+                        if (dismissLabel != null) {
+                            TextButton(onClick = onDismiss) { Text(dismissLabel) }
+                        }
                         confirm()
                     }
                 }

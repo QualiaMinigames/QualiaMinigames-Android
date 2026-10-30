@@ -14,20 +14,28 @@
 
 package com.qiushui1012.app.minigames.ui
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -40,14 +48,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.core.content.res.ResourcesCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qiushui1012.app.minigames.AppContainer
+import com.qiushui1012.app.minigames.DurationFont
 import com.qiushui1012.app.minigames.R
 import com.qiushui1012.app.minigames.Space
+import com.qiushui1012.app.minigames.data.GameKind
 import com.qiushui1012.app.minigames.data.Record
 import com.qiushui1012.app.minigames.data.RecordKey
-import com.qiushui1012.app.minigames.data.Settings
 import com.qiushui1012.app.minigames.difficultyFromStorageName
 import com.qiushui1012.app.minigames.export.ImageExport
 import com.qiushui1012.app.minigames.export.RecordImage
@@ -61,6 +73,9 @@ import kotlinx.coroutines.withContext
 /** How a finish time is written in the list. */
 private val listStamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
+/** The narrowest a record card may be drawn before the grid uses fewer columns. */
+private val CardMinWidth = 340.dp
+
 /**
  * Every finished game, grouped by the parameters it was played with.
  *
@@ -72,15 +87,20 @@ private val listStamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
  * # Selecting and exporting
  *
  * A selection mode exists because the two exports are different pictures. One record is a
- * card, several are a column, and the player chooses which by how many are selected. The
- * column's height follows the number of records: it is never cut, paged or scaled to fit
- * anything.
+ * card, several are a table, and the player chooses which by how many are selected.
+ *
+ * # Where the actions live
+ *
+ * Clearing and selecting sit in the header, right-aligned, and the selection's own actions
+ * appear beside them once it is on: the page has no second bar to scroll past, and the two
+ * states are never both offering the same verb. Clearing asks first; the confirmation is a
+ * dialog of [ShellDialog], so it covers the navigation like every other dialog.
  */
 @Composable
 fun RecordsScreen(
     container: AppContainer,
-    settings: Settings,
     bottomInset: Dp,
+    onRequestDialog: (ShellDialog) -> Unit,
 ) {
     val records by container.records.records.collectAsStateWithLifecycle(initialValue = emptyList())
     val context = LocalContext.current
@@ -89,8 +109,10 @@ fun RecordsScreen(
     var selecting by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
     var message by remember { mutableStateOf<String?>(null) }
-    var confirmingClear by remember { mutableStateOf(false) }
     var shareTarget by remember { mutableStateOf<android.net.Uri?>(null) }
+    // Expanded is the state a group starts in, so the set holds the collapsed ones rather than
+    // the open ones: a new game's group should not appear open only after it has been seen.
+    var collapsed by remember { mutableStateOf<Set<GameKind>>(emptySet()) }
 
     val exportedAtLabel = stringResource(R.string.records_exported_at, currentStamp())
     val unknownPlayer = stringResource(R.string.records_unknown_player)
@@ -100,6 +122,8 @@ fun RecordsScreen(
     // resolved here, inside the composition, because the drawing runs outside it.
     val labels: Map<RecordKey, String> = records.associate { record -> record.key to keyLabel(record.key) }
     val label: (RecordKey) -> String = { key -> labels[key] ?: key.toString() }
+    val names: Map<RecordKey, String> = records.associate { record -> record.key to gameKindLabel(kindOf(record.key)) }
+    val name: (RecordKey) -> String = { key -> names[key] ?: "" }
     val headers =
         listOf(
             stringResource(R.string.records_column_player),
@@ -107,6 +131,11 @@ fun RecordsScreen(
             stringResource(R.string.records_column_time),
             stringResource(R.string.records_column_finished),
         )
+    val exportTitle = stringResource(R.string.records_export_title)
+    val durationTypeface =
+        remember(context) {
+            ResourcesCompat.getFont(context, R.font.cascadia_code) ?: android.graphics.Typeface.MONOSPACE
+        }
 
     fun export(selection: List<Record>) {
         if (selection.isEmpty()) {
@@ -117,9 +146,25 @@ fun RecordsScreen(
                 withContext(Dispatchers.Default) {
                     val bitmap =
                         if (selection.size == 1) {
-                            RecordImage.single(selection.first(), label, unknownPlayer, exportedAtLabel)
+                            RecordImage.single(
+                                record = selection.first(),
+                                name = name,
+                                params = label,
+                                unknown = unknownPlayer,
+                                exportedAt = exportedAtLabel,
+                                durationTypeface = durationTypeface,
+                            )
                         } else {
-                            RecordImage.several(selection, label, unknownPlayer, exportedAtLabel, headers)
+                            RecordImage.several(
+                                records = selection,
+                                name = name,
+                                params = label,
+                                unknown = unknownPlayer,
+                                exportedAt = exportedAtLabel,
+                                title = exportTitle,
+                                headers = headers,
+                                durationTypeface = durationTypeface,
+                            )
                         }
                     ImageExport.save(context, bitmap, "qualia-minigames-${System.currentTimeMillis()}.png")
                 }
@@ -134,132 +179,225 @@ fun RecordsScreen(
         }
     }
 
-    Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = Space.l, vertical = Space.l),
-        verticalArrangement = Arrangement.spacedBy(Space.l),
-    ) {
-        ScreenHeader(
-            title = stringResource(R.string.records_title),
-            actions = {
-                if (records.isNotEmpty()) {
-                    TextButton(
-                        onClick = {
-                            selecting = !selecting
-                            selected = emptySet()
-                        },
-                    ) {
-                        Text(
-                            stringResource(
-                                if (selecting) R.string.records_clear_selection else R.string.records_select,
-                            ),
-                        )
-                    }
-                }
-            },
-        )
-
-        if (records.isEmpty()) {
-            Text(stringResource(R.string.records_empty), style = MaterialTheme.typography.bodyMedium)
-        } else if (selecting) {
-            SelectionBar(
-                count = selected.size,
-                onSelectAll = {
-                    selected =
-                        if (selected.size == records.size) {
-                            emptySet()
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        // A card keeps at least [CardMinWidth], and the grid gives it more when the window has
+        // it: three columns on a tablet, one on a phone held upright.
+        val columns = (maxWidth / CardMinWidth).toInt().coerceIn(1, 3)
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = Space.l, vertical = Space.l),
+            verticalArrangement = Arrangement.spacedBy(Space.l),
+        ) {
+            RecordsHeader(
+                title = stringResource(R.string.records_title),
+                // Only a selection can need a line of its own: "clear" and "select" are two
+                // short words, while a selection offers five controls.
+                ownLine = selecting,
+                actions = {
+                    if (records.isNotEmpty()) {
+                        if (selecting) {
+                            SelectionActions(
+                                count = selected.size,
+                                onSelectAll = {
+                                    selected =
+                                        if (selected.size == records.size) {
+                                            emptySet()
+                                        } else {
+                                            records.map { it.id() }.toSet()
+                                        }
+                                },
+                                onExport = { export(records.filter { it.id() in selected }) },
+                                onDelete = {
+                                    scope.launch {
+                                        container.records.delete(selected)
+                                        selected = emptySet()
+                                        selecting = false
+                                    }
+                                },
+                                onCancel = {
+                                    selecting = false
+                                    selected = emptySet()
+                                },
+                            )
                         } else {
-                            records.map { it.id() }.toSet()
+                            TextButton(
+                                onClick = { onRequestDialog(ShellDialog.ClearRecords) },
+                            ) {
+                                Text(stringResource(R.string.records_delete_all))
+                            }
+                            TextButton(
+                                onClick = {
+                                    selecting = true
+                                    selected = emptySet()
+                                },
+                            ) {
+                                Text(stringResource(R.string.records_select))
+                            }
                         }
-                },
-                onExport = { export(records.filter { it.id() in selected }) },
-                onDelete = {
-                    scope.launch {
-                        container.records.delete(selected)
-                        selected = emptySet()
-                        selecting = false
                     }
                 },
             )
-        }
 
-        message?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            shareTarget?.let { uri ->
-                TextButton(onClick = { shareImage(context, uri) }) {
-                    Text(stringResource(R.string.records_export_share))
+            if (records.isEmpty()) {
+                Text(stringResource(R.string.records_empty), style = MaterialTheme.typography.bodyMedium)
+            }
+
+            message?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                shareTarget?.let { uri ->
+                    TextButton(onClick = { shareImage(context, uri) }) {
+                        Text(stringResource(R.string.records_export_share))
+                    }
                 }
             }
-        }
 
-        if (records.isNotEmpty()) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
-                TextButton(onClick = { confirmingClear = true }) {
-                    Text(stringResource(R.string.records_delete_all))
-                }
-            }
-        }
-
-        for ((key, group) in groupRecords(records)) {
-            RecordGroup(
-                key = key,
-                records = group,
-                selecting = selecting,
-                selected = selected,
-                onToggle = { id ->
-                    selected = if (id in selected) selected - id else selected + id
-                },
-            )
-        }
-
-        Box(modifier = Modifier.padding(bottom = bottomInset))
-    }
-
-    if (confirmingClear) {
-        AlertDialog(
-            onDismissRequest = { confirmingClear = false },
-            title = { Text(stringResource(R.string.records_delete_all)) },
-            text = { Text(stringResource(R.string.records_delete_all_confirm)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        scope.launch { container.records.deleteAllRecords() }
-                        confirmingClear = false
+            for ((kind, ofKind) in recordsByKind(records)) {
+                val expanded = kind !in collapsed
+                KindHeader(
+                    name = gameKindLabel(kind),
+                    expanded = expanded,
+                    onToggle = {
+                        collapsed =
+                            if (expanded) {
+                                collapsed + kind
+                            } else {
+                                collapsed - kind
+                            }
                     },
-                ) {
-                    Text(stringResource(R.string.records_delete))
+                )
+                if (expanded) {
+                    val groups = groupRecords(ofKind)
+                    for (row in groups.chunked(columns)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(Space.l)) {
+                            for ((key, group) in row) {
+                                Box(Modifier.weight(1f)) {
+                                    RecordGroup(
+                                        key = key,
+                                        records = group,
+                                        selecting = selecting,
+                                        selected = selected,
+                                        onToggle = { id ->
+                                            selected = if (id in selected) selected - id else selected + id
+                                        },
+                                        onOpen = { onRequestDialog(ShellDialog.RecordDetail(it)) },
+                                    )
+                                }
+                            }
+                            repeat(columns - row.size) {
+                                Spacer(Modifier.weight(1f))
+                            }
+                        }
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmingClear = false }) {
-                    Text(stringResource(R.string.dialog_cancel))
-                }
-            },
-        )
+            }
+
+            Box(modifier = Modifier.padding(bottom = bottomInset))
+        }
     }
 }
 
-/** The bar that appears while records are selected. */
+/**
+ * The header of the records page.
+ *
+ * The actions sit at the right end of the title's line, which is where the two of them belong
+ * whatever the window is: the title is one short word, so "clear" and "select" fit beside it
+ * even on the narrowest phone. A selection offers five controls at once, and those only fit
+ * beside a heading on a wide window; when [ownLine] says they do not, they take a line of their
+ * own — still right-aligned, so the corner they are in does not move.
+ */
 @Composable
-private fun SelectionBar(
+private fun RecordsHeader(
+    title: String,
+    ownLine: Boolean,
+    actions: @Composable () -> Unit,
+) {
+    if (ownLine) {
+        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+            Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Spacer(Modifier.weight(1f))
+                actions()
+            }
+        }
+    } else {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.weight(1f))
+            actions()
+        }
+    }
+}
+
+/**
+ * The controls a selection offers, left to right: how many are selected, select all, export,
+ * delete, and the way out.
+ *
+ * Export and delete are disabled while nothing is selected, which is the rule the selection bar
+ * has always followed: there is nothing to export or delete yet.
+ */
+@Composable
+private fun SelectionActions(
     count: Int,
     onSelectAll: () -> Unit,
     onExport: () -> Unit,
     onDelete: () -> Unit,
+    onCancel: () -> Unit,
 ) {
-    SectionCard {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(Space.xs, Alignment.End),
+        verticalArrangement = Arrangement.spacedBy(Space.xs),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ) {
+            Text(
+                "$count",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(horizontal = Space.s, vertical = Space.xs),
+            )
+        }
+        TextButton(onClick = onSelectAll) { Text(stringResource(R.string.records_select_all)) }
+        TextButton(onClick = onExport, enabled = count > 0) { Text(stringResource(R.string.records_export)) }
+        TextButton(onClick = onDelete, enabled = count > 0) { Text(stringResource(R.string.records_delete)) }
+        TextButton(onClick = onCancel) { Text(stringResource(R.string.records_clear_selection)) }
+    }
+}
+
+/**
+ * The dropdown above a game's cards: its name, and whether its cards are open.
+ *
+ * One dropdown per game rather than one per parameter: a player looking for their sudoku times
+ * should not have to fold away every pipes board first.
+ */
+@Composable
+private fun KindHeader(
+    name: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        onClick = onToggle,
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = Space.l, vertical = Space.m),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Space.s),
         ) {
-            Text("$count", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = onSelectAll) { Text(stringResource(R.string.records_select_all)) }
-            TextButton(onClick = onExport, enabled = count > 0) { Text(stringResource(R.string.records_export)) }
-            TextButton(onClick = onDelete, enabled = count > 0) { Text(stringResource(R.string.records_delete)) }
+            Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Icon(
+                imageVector = if (expanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+            )
         }
     }
 }
@@ -272,16 +410,37 @@ private fun RecordGroup(
     selecting: Boolean,
     selected: Set<String>,
     onToggle: (String) -> Unit,
+    onOpen: (Record) -> Unit,
 ) {
     val best = records.minByOrNull { it.seconds }
-    SectionCard(title = keyLabel(key)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(stringResource(R.string.records_best), style = MaterialTheme.typography.labelLarge)
-            Text(formatDuration(best?.seconds ?: 0), style = MaterialTheme.typography.labelLarge)
-        }
+    SectionCard(
+        header = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Space.s),
+            ) {
+                // The parameters are the card's title, and the best time stands beside them:
+                // the two are what a player compares this card with the next one by.
+                Text(
+                    keyLabel(key),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    stringResource(R.string.records_best),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    formatDuration(best?.seconds ?: 0),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontFamily = DurationFont,
+                )
+            }
+        },
+    ) {
         Text(stringResource(R.string.records_history), style = MaterialTheme.typography.labelLarge)
         for (record in records.sortedByDescending { it.finishedAt }) {
             val id = record.id()
@@ -293,7 +452,7 @@ private fun RecordGroup(
                             if (selecting) {
                                 Modifier.toggleable(value = id in selected, onValueChange = { onToggle(id) })
                             } else {
-                                Modifier
+                                Modifier.clickableRow { onOpen(record) }
                             },
                         ),
                 verticalAlignment = Alignment.CenterVertically,
@@ -313,11 +472,96 @@ private fun RecordGroup(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Text(formatDuration(record.seconds), style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    formatDuration(record.seconds),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = DurationFont,
+                )
             }
         }
     }
 }
+
+/** Makes a row openable by a tap. */
+private fun Modifier.clickableRow(onClick: () -> Unit): Modifier = this.clickable(onClick = onClick)
+
+/**
+ * The dialog that shows one record in full.
+ *
+ * Everything the record holds is here, including the seed: the list is a summary, and the seed
+ * is the one field that says which puzzle this was.
+ */
+@Composable
+fun RecordDetailDialog(
+    record: Record,
+    onDismiss: () -> Unit,
+) {
+    ModalForm(
+        title = stringResource(R.string.records_detail_title),
+        onDismiss = onDismiss,
+        dismissLabel = null,
+        confirm = { ModalConfirm(stringResource(R.string.action_close), onClick = onDismiss) },
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(Space.m),
+        ) {
+            LabeledValue(stringResource(R.string.records_detail_game), gameKindLabel(kindOf(record.key)))
+            LabeledValue(stringResource(R.string.records_detail_params), keyLabel(record.key))
+            LabeledValue(
+                stringResource(R.string.records_column_player),
+                record.playerName.ifBlank { stringResource(R.string.records_unknown_player) },
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+                Text(stringResource(R.string.records_column_time), style = MaterialTheme.typography.labelLarge)
+                Text(
+                    formatDuration(record.seconds),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = DurationFont,
+                )
+            }
+            LabeledValue(
+                stringResource(R.string.records_column_finished),
+                listStamp.format(Instant.ofEpochMilli(record.finishedAt).atZone(ZoneId.systemDefault())),
+            )
+            LabeledValue(
+                stringResource(R.string.records_detail_seed),
+                // A record written before seeds were kept has none, and inventing one would be a
+                // number that does not generate this puzzle.
+                record.seed?.toString() ?: "-",
+            )
+        }
+    }
+}
+
+/** The dialog that asks before every record is deleted. */
+@Composable
+fun ClearRecordsDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalForm(
+        title = stringResource(R.string.records_delete_all),
+        onDismiss = onDismiss,
+        confirm = { ModalConfirm(stringResource(R.string.records_delete), onClick = onConfirm) },
+    ) {
+        Text(stringResource(R.string.records_delete_all_confirm))
+    }
+}
+
+/** Groups records by the game they belong to, pipes first. */
+fun recordsByKind(records: List<Record>): List<Pair<GameKind, List<Record>>> =
+    listOf(GameKind.Pipes, GameKind.Sudoku).mapNotNull { kind ->
+        val ofKind = records.filter { kindOf(it.key) == kind }
+        if (ofKind.isEmpty()) null else kind to ofKind
+    }
+
+/** Returns which game a record belongs to. */
+fun kindOf(key: RecordKey): GameKind =
+    when (key) {
+        is RecordKey.Pipes -> GameKind.Pipes
+        is RecordKey.Sudoku -> GameKind.Sudoku
+    }
 
 /** Groups records by the parameters they were played with, in a stable order. */
 fun groupRecords(records: List<Record>): List<Pair<RecordKey, List<Record>>> =
@@ -333,9 +577,19 @@ fun groupRecords(records: List<Record>): List<Pair<RecordKey, List<Record>>> =
             ),
         )
 
+/** Returns the label of a game, which is its name in the interface's language. */
+@Composable
+fun gameKindLabel(kind: GameKind): String =
+    stringResource(
+        when (kind) {
+            GameKind.Pipes -> R.string.home_pipes_name
+            GameKind.Sudoku -> R.string.home_sudoku_name
+        },
+    )
+
 /** Returns the label of a record's parameters. */
 @Composable
-private fun keyLabel(key: RecordKey): String =
+fun keyLabel(key: RecordKey): String =
     when (key) {
         is RecordKey.Pipes ->
             stringResource(

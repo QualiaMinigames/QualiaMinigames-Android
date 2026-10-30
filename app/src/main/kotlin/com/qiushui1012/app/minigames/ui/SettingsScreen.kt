@@ -14,11 +14,14 @@
 
 package com.qiushui1012.app.minigames.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -31,9 +34,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.qiushui1012.app.minigames.AppContainer
 import com.qiushui1012.app.minigames.R
 import com.qiushui1012.app.minigames.Space
@@ -41,6 +48,14 @@ import com.qiushui1012.app.minigames.data.AppLanguage
 import com.qiushui1012.app.minigames.data.Settings
 import com.qiushui1012.app.minigames.data.ThemeSetting
 import kotlinx.coroutines.launch
+
+/**
+ * The size of the application's mark in the about section.
+ *
+ * It is a mark, not an icon in a list: large enough that the frame, the welded corner and the
+ * gamepad are each legible, and small enough to leave the name beside it on one line.
+ */
+private val LogoSize = 64.dp
 
 /**
  * Everything that is not a game: the player's name, the language, the theme, the feedback
@@ -69,7 +84,7 @@ fun SettingsScreen(
     ) {
         ScreenHeader(stringResource(R.string.settings_title))
 
-        SectionCard(title = stringResource(R.string.settings_player)) {
+        SectionCard(header = { SectionTitle(stringResource(R.string.settings_player)) }) {
             OutlinedTextField(
                 value = playerName,
                 onValueChange = {
@@ -83,7 +98,7 @@ fun SettingsScreen(
             )
         }
 
-        SectionCard(title = stringResource(R.string.settings_language)) {
+        SectionCard(header = { SectionTitle(stringResource(R.string.settings_language)) }) {
             ChoiceRow(
                 options = AppLanguage.entries,
                 selected = settings.language,
@@ -92,7 +107,7 @@ fun SettingsScreen(
             )
         }
 
-        SectionCard(title = stringResource(R.string.settings_theme)) {
+        SectionCard(header = { SectionTitle(stringResource(R.string.settings_theme)) }) {
             ChoiceRow(
                 options = ThemeSetting.entries,
                 selected = settings.theme,
@@ -101,7 +116,7 @@ fun SettingsScreen(
             )
         }
 
-        SectionCard(title = stringResource(R.string.settings_sound)) {
+        SectionCard(header = { SectionTitle(stringResource(R.string.settings_sound)) }) {
             SwitchRow(
                 label = stringResource(R.string.settings_sound),
                 explainer = stringResource(R.string.settings_sound_explainer),
@@ -110,7 +125,7 @@ fun SettingsScreen(
             )
         }
 
-        SectionCard(title = stringResource(R.string.settings_haptics)) {
+        SectionCard(header = { SectionTitle(stringResource(R.string.settings_haptics)) }) {
             SwitchRow(
                 label = stringResource(R.string.settings_haptics),
                 explainer = stringResource(R.string.settings_haptics_explainer),
@@ -119,14 +134,49 @@ fun SettingsScreen(
             )
         }
 
-        SectionCard(title = stringResource(R.string.settings_about)) {
-            LabeledValue(stringResource(R.string.settings_version), BuildVersion)
+        SectionCard(header = { SectionTitle(stringResource(R.string.settings_about)) }) {
+            AboutHeader()
             LabeledValue(stringResource(R.string.settings_core_version), rulesVersionOrEmpty())
             LabeledValue(stringResource(R.string.settings_license), stringResource(R.string.settings_license_value))
             LabeledValue(stringResource(R.string.settings_repository), RepositoryUrl)
         }
 
         Column(modifier = Modifier.padding(bottom = bottomInset)) {}
+    }
+}
+
+/**
+ * The header of the about section: the mark of the application beside its name.
+ *
+ * The mark is the same drawing as the launcher icon, from `app_logo.xml`, because a reader who
+ * got here from the launcher recognises it. It is drawn at a size that reads as a mark rather
+ * than a thumbnail, and the two pieces of text beside it are the name and the version, so the
+ * section says what the application is before it starts listing what it is made of.
+ */
+@Composable
+private fun AboutHeader() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Space.m),
+    ) {
+        Image(
+            painter = painterResource(R.drawable.app_logo),
+            contentDescription = null,
+            modifier = Modifier.size(LogoSize),
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+            Text(
+                stringResource(R.string.app_name),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                stringResource(R.string.settings_version_with_value, BuildVersion),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -138,7 +188,7 @@ private fun SwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    androidx.compose.foundation.layout.Row(
+    Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {

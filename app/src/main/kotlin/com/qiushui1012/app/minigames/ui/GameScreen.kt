@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.qiushui1012.app.minigames.AppContainer
+import com.qiushui1012.app.minigames.DurationFont
 import com.qiushui1012.app.minigames.GameInProgress
 import com.qiushui1012.app.minigames.R
 import com.qiushui1012.app.minigames.difficultyFromStorageName
@@ -110,6 +111,7 @@ fun GameScreen(
                 playerName = game.playerName,
                 seconds = elapsed,
                 finishedAt = System.currentTimeMillis(),
+                seed = game.seed,
             )
         // The record is written in the container's scope, not this screen's: leaving the
         // screen cancels a scope the screen owns, and the write would be cancelled with it,
@@ -203,7 +205,7 @@ private fun GameHeader(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Text(formatDuration(elapsed), style = MaterialTheme.typography.titleMedium)
+        Text(formatDuration(elapsed), style = MaterialTheme.typography.titleMedium, fontFamily = DurationFont)
         TextButton(onClick = onUndo) { Text(stringResource(R.string.play_undo)) }
     }
 }

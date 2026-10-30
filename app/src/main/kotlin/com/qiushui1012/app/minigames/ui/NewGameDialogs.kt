@@ -18,13 +18,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,14 +32,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
 import com.qiushui1012.app.minigames.AppContainer
 import com.qiushui1012.app.minigames.GameInProgress
 import com.qiushui1012.app.minigames.R
-import com.qiushui1012.app.minigames.difficultyFromStorageName
 import com.qiushui1012.app.minigames.Space
-import com.qiushui1012.app.minigames.data.SavedGame
+import com.qiushui1012.app.minigames.data.GameKind
 import com.qiushui1012.app.minigames.data.Settings
+import com.qiushui1012.app.minigames.difficultyFromStorageName
 import com.qiushui1012.app.minigames.rules.PipesLayout
 import com.qiushui1012.app.minigames.rules.Rules
 import com.qiushui1012.app.minigames.rules.SudokuDifficulty
@@ -51,22 +48,28 @@ import kotlinx.coroutines.launch
 /**
  * The dialog that starts a pipes game.
  *
- * # Why the size is both a slider and a field
+ * # Why the size is both a field and a slider
  *
  * The board goes from 4 to 35 cells on a side, which is too wide a range for a slider to land
  * on one value by touch, and too tedious to reach by pressing a field's arrow thirty times.
- * The slider is for jumping to roughly the right board, the field for naming one exactly; the
- * two show the same value.
+ * The field is above and the slider below it: the field is where a number is typed and read,
+ * the slider is where the range is felt, and reading the form goes from the exact value to the
+ * coarser control that sets it.
  *
  * The player name defaults to the one in the settings, and is remembered by the parameter it
  * was typed under only for this game: a name typed once is not a reason to rename the player
  * for every later game.
+ *
+ * # Why there is no "new game" button
+ *
+ * A new game is what this dialog is for, so the card on the home screen starts it and the
+ * dialog only chooses the parameters. The button that used to sit here asked the player to
+ * confirm the thing they had just asked for.
  */
 @Composable
 fun PipesNewGameDialog(
     container: AppContainer,
     settings: Settings,
-    save: SavedGame?,
     onDismiss: () -> Unit,
     onStart: (GameInProgress) -> Unit,
 ) {
@@ -77,58 +80,18 @@ fun PipesNewGameDialog(
     var sizeText by remember { mutableStateOf(size.toString()) }
     var wrapped by remember { mutableStateOf(settings.lastPipesWrapped) }
     var playerName by remember { mutableStateOf(settings.playerName) }
-    var confirmingReplace by remember { mutableStateOf(false) }
-
-    val resumed = remember(save) { save?.let(::restoreGame) }
-    var restoreFailed by remember { mutableStateOf(false) }
 
     ModalForm(
         title = stringResource(R.string.dialog_new_game_title),
         onDismiss = onDismiss,
         confirm = {
             ModalConfirm(
-                label =
-                    stringResource(
-                        when {
-                            confirmingReplace -> R.string.dialog_replace_confirm
-                            save != null -> R.string.pipes_continue
-                            else -> R.string.dialog_start
-                        },
-                    ),
-                onClick = {
-                    when {
-                        // A saved game is the thing the player most likely came back for, so
-                        // it is the confirm button and a new game is the secondary one. A new
-                        // game over an existing save asks first: the save is a game in
-                        // progress, and discarding it is not something to do by mis-tap.
-                        save != null && resumed != null -> onStart(resumed)
-                        confirmingReplace -> startNew(scope, container, size, wrapped, playerName, onStart)
-                        save != null && resumed == null -> restoreFailed = true
-                        save != null -> confirmingReplace = true
-                        else -> startNew(scope, container, size, wrapped, playerName, onStart)
-                    }
-                },
+                label = stringResource(R.string.dialog_start),
+                onClick = { startNew(scope, container, size, wrapped, playerName, onStart) },
             )
-        },
-        secondary = {
-            if (save != null && resumed != null) {
-                TextButton(onClick = { confirmingReplace = true }) {
-                    Text(stringResource(R.string.pipes_new_game))
-                }
-            }
         },
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
-            Text("${stringResource(R.string.pipes_size)}: $size", style = MaterialTheme.typography.labelLarge)
-            Slider(
-                value = size.toFloat(),
-                onValueChange = {
-                    size = it.toInt().coerceIn(minimum, maximum)
-                    sizeText = size.toString()
-                },
-                valueRange = minimum.toFloat()..maximum.toFloat(),
-                steps = maximum - minimum - 1,
-            )
             OutlinedTextField(
                 value = sizeText,
                 onValueChange = { typed ->
@@ -139,12 +102,20 @@ fun PipesNewGameDialog(
                         }
                     }
                 },
-                label = { Text(stringResource(R.string.pipes_size)) },
+                label = { Text(stringResource(R.string.pipes_size_range, minimum, maximum)) },
                 singleLine = true,
                 isError = sizeText.toIntOrNull()?.let { it !in minimum..maximum } ?: true,
-                supportingText = { Text("$minimum – $maximum") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
+            )
+            Slider(
+                value = size.toFloat(),
+                onValueChange = {
+                    size = it.toInt().coerceIn(minimum, maximum)
+                    sizeText = size.toString()
+                },
+                valueRange = minimum.toFloat()..maximum.toFloat(),
+                steps = maximum - minimum - 1,
             )
             Text(stringResource(R.string.pipes_layout), style = MaterialTheme.typography.labelLarge)
             Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
@@ -159,20 +130,6 @@ fun PipesNewGameDialog(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            if (confirmingReplace) {
-                Text(
-                    stringResource(R.string.dialog_replace_save),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            if (restoreFailed) {
-                Text(
-                    stringResource(R.string.records_export_failed),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
         }
     }
 }
@@ -189,7 +146,7 @@ private fun startNew(
     val board = Rules.newPipes(size, if (wrapped) PipesLayout.Wrapped else PipesLayout.Flat, System.currentTimeMillis()) ?: return
     scope.launch {
         container.settings.setLastPipes(size, wrapped)
-        container.records.clearSave(com.qiushui1012.app.minigames.data.GameKind.Pipes)
+        container.records.clearSave(GameKind.Pipes)
     }
     onStart(GameInProgress.Pipes(board, playerName.trim(), 0))
 }
@@ -204,49 +161,21 @@ private fun startNew(
 fun SudokuNewGameDialog(
     container: AppContainer,
     settings: Settings,
-    save: SavedGame?,
     onDismiss: () -> Unit,
     onStart: (GameInProgress) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var difficulty by remember { mutableStateOf(difficultyFromStorageName(settings.lastSudokuDifficulty)) }
     var playerName by remember { mutableStateOf(settings.playerName) }
-    var confirmingReplace by remember { mutableStateOf(false) }
-    var restoreFailed by remember { mutableStateOf(false) }
-    val resumed = remember(save) { save?.let(::restoreGame) }
 
     ModalForm(
         title = stringResource(R.string.dialog_new_game_title),
         onDismiss = onDismiss,
         confirm = {
             ModalConfirm(
-                label =
-                    stringResource(
-                        when {
-                            confirmingReplace -> R.string.dialog_replace_confirm
-                            save != null -> R.string.sudoku_continue
-                            else -> R.string.dialog_start
-                        },
-                    ),
-                onClick = {
-                    when {
-                        // The same rule as the pipes dialog: a saved game is the confirm
-                        // button, a new game is secondary and asks before discarding it.
-                        save != null && resumed != null -> onStart(resumed)
-                        confirmingReplace -> startSudoku(scope, container, difficulty, playerName, onStart)
-                        save != null && resumed == null -> restoreFailed = true
-                        save != null -> confirmingReplace = true
-                        else -> startSudoku(scope, container, difficulty, playerName, onStart)
-                    }
-                },
+                label = stringResource(R.string.dialog_start),
+                onClick = { startSudoku(scope, container, difficulty, playerName, onStart) },
             )
-        },
-        secondary = {
-            if (save != null && resumed != null) {
-                TextButton(onClick = { confirmingReplace = true }) {
-                    Text(stringResource(R.string.sudoku_new_game))
-                }
-            }
         },
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(Space.m)) {
@@ -264,20 +193,6 @@ fun SudokuNewGameDialog(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            if (confirmingReplace) {
-                Text(
-                    stringResource(R.string.dialog_replace_save),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            if (restoreFailed) {
-                Text(
-                    stringResource(R.string.records_export_failed),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
         }
     }
 }
@@ -293,7 +208,7 @@ private fun startSudoku(
     val board = Rules.newSudoku(difficulty, System.currentTimeMillis())
     scope.launch {
         container.settings.setLastSudokuDifficulty(difficulty.toStorageName())
-        container.records.clearSave(com.qiushui1012.app.minigames.data.GameKind.Sudoku)
+        container.records.clearSave(GameKind.Sudoku)
     }
     onStart(GameInProgress.Sudoku(board, playerName.trim(), 0))
 }

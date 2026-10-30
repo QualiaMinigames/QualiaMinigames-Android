@@ -16,11 +16,10 @@
     <string name="home_pipes_summary">%1$d × %1$d，%2$s</string>
     <string name="home_sudoku_name">数独</string>
     <string name="home_sudoku_summary">%1$s</string>
-    <string name="home_can_continue">进行中</string>
 
     <string name="pipes_layout_flat">平边</string>
     <string name="pipes_layout_wrapped">跨边</string>
-    <string name="pipes_size">尺寸</string>
+    <string name="pipes_size_range">尺寸（%1$d~%2$d）</string>
     <string name="pipes_layout">边缘</string>
     <string name="pipes_new_game">新对局</string>
     <string name="pipes_continue">继续</string>
@@ -32,7 +31,6 @@
     <string name="sudoku_difficulty_medium">中等</string>
     <string name="sudoku_difficulty_hard">困难</string>
     <string name="sudoku_difficulty">难度</string>
-    <string name="sudoku_new_game">新对局</string>
     <string name="sudoku_continue">继续</string>
     <string name="sudoku_overwrite">开始新对局会丢弃进行中的这一局。</string>
     <string name="sudoku_notes">笔记</string>
@@ -49,8 +47,10 @@
     <string name="dialog_player_name_hint">留空则使用默认玩家名</string>
     <string name="dialog_start">开始</string>
     <string name="dialog_cancel">取消</string>
-    <string name="dialog_replace_save">已有进行中的对局，开始新对局会丢弃它。</string>
-    <string name="dialog_replace_confirm">丢弃并开始</string>
+    <string name="dialog_confirm">确定</string>
+    <string name="dialog_discard_title">是否丢弃？</string>
+    <string name="dialog_discard_save">仍有未完成的对局，点击确定将会丢弃该对局并开始新对局。</string>
+    <string name="dialog_restore_failed">这份存档由另一个版本的规则写入，无法打开。</string>
 
     <string name="records_title">记录</string>
     <string name="records_empty">还没有任何记录。</string>
@@ -67,9 +67,14 @@
     <string name="records_export_done">已保存到 %1$s</string>
     <string name="records_export_share">分享</string>
     <string name="records_export_failed">图片保存失败。</string>
+    <string name="records_export_title">游玩记录</string>
     <string name="records_time_columns">玩家、游戏、用时、完成时间</string>
     <string name="records_exported_at">导出时间 %1$s</string>
     <string name="records_unknown_player">未命名</string>
+    <string name="records_detail_title">记录</string>
+    <string name="records_detail_game">玩法</string>
+    <string name="records_detail_params">参数</string>
+    <string name="records_detail_seed">种子</string>
     <string name="records_column_player">玩家</string>
     <string name="records_column_game">玩法</string>
     <string name="records_column_time">用时</string>
@@ -89,7 +94,7 @@
     <string name="settings_haptics">震动</string>
     <string name="settings_haptics_explainer">同样的操作伴随一次短促震动。</string>
     <string name="settings_about">关于</string>
-    <string name="settings_version">版本</string>
+    <string name="settings_version_with_value">版本 %1$s</string>
     <string name="settings_core_version">规则版本</string>
     <string name="settings_license">许可证</string>
     <string name="settings_license_value">Apache-2.0</string>

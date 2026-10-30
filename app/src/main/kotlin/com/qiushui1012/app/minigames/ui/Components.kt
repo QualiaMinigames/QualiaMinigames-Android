@@ -95,14 +95,16 @@ private fun shadowColor(): Color {
 }
 
 /**
- * A titled card: the shape of every section below a screen's header.
+ * A card: the shape of every section below a screen's header.
  *
- * [title] is optional because some sections are one control whose own label is enough.
+ * [header] is optional because some sections are one control whose own label is enough. It is
+ * a slot rather than a string because a section's heading is sometimes a row of its own — a set
+ * of parameters with the best time beside them — and a title line cannot express that.
  */
 @Composable
 fun SectionCard(
     modifier: Modifier = Modifier,
-    title: String? = null,
+    header: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     ShadowedSurface(shape = MaterialTheme.shapes.large, modifier = modifier.fillMaxWidth()) {
@@ -116,13 +118,17 @@ fun SectionCard(
                 modifier = Modifier.fillMaxWidth().padding(Space.l),
                 verticalArrangement = Arrangement.spacedBy(Space.m),
             ) {
-                title?.let {
-                    Text(it, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                }
+                header?.invoke()
                 content()
             }
         }
     }
+}
+
+/** The heading of a [SectionCard]. */
+@Composable
+fun SectionTitle(text: String) {
+    Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
 }
 
 /** A heading with its actions on the right, which is what a screen's header is. */

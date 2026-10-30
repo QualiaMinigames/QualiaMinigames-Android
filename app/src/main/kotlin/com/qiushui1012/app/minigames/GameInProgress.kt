@@ -43,6 +43,9 @@ sealed interface GameInProgress {
     /** The board itself. */
     val kind: GameKind
 
+    /** The seed the puzzle was generated from, which a finished game's record keeps. */
+    val seed: Long
+
     /** A pipes game. */
     data class Pipes(
         /** The board. */
@@ -53,6 +56,8 @@ sealed interface GameInProgress {
         override val kind: GameKind = GameKind.Pipes
 
         override val key: RecordKey = RecordKey.Pipes(board.size, board.layout == PipesLayout.Wrapped)
+
+        override val seed: Long get() = board.seed
     }
 
     /** A sudoku game. */
@@ -65,6 +70,8 @@ sealed interface GameInProgress {
         override val kind: GameKind = GameKind.Sudoku
 
         override val key: RecordKey = RecordKey.Sudoku(board.difficulty.toStorageName())
+
+        override val seed: Long get() = board.seed
     }
 }
 

@@ -21,6 +21,7 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
 import com.qiushui1012.app.minigames.data.Record
+import com.qiushui1012.app.minigames.data.RecordKey
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -30,50 +31,46 @@ import java.time.format.DateTimeFormatter
  *
  * # Why this is written against `android.graphics` rather than the composition
  *
- * An image is not a screen: it is drawn once, at a width and a height decided by the number of
- * records rather than by the size of the window, and it must be the same image whatever the
- * window is doing at the time. Drawing it with the platform's own primitives also means it can
- * be produced without a composition at all, which is what lets the export run while the records
- * screen is scrolled somewhere else.
+ * An image is not a screen: it is drawn once, at a width and a height decided by the records,
+ * and it must be the same image whatever the window is doing at the time.
  *
- * # Nothing is written past the edge of the card
+ * # Where the text goes
  *
- * Every string is placed at a y that was reserved for it, and the heights are constants rather
- * than the result of measuring one line after another. Two strings that both landed near the
- * bottom of the card used to overlap, which is a picture that says the finish time twice, in
- * two sizes, on top of itself.
+ * Every line is placed by the top of its own line box, and the baseline is derived from the
+ * paint's own font metrics. Constants that guessed a baseline put two strings on top of each
+ * other at the bottom of a card, which is a picture that says the finish time twice, in two
+ * sizes, in the same place.
  *
  * # Two layouts
  *
- * One record is a card: the game, the time, the player and when it finished, with enough room
- * to read as a thing rather than as a row of a table. Several records are one column: a header,
- * then one line per record. The column grows with the number of records and is never cut, paged
- * or scaled to fit anything.
+ * One record is a card: the game's name as the title, its parameters beside the title, then the
+ * time, the player and when it finished. Several records are a card holding a table whose
+ * columns are as wide as their contents require, so the image is as wide as the table rather
+ * than a fixed size with slack at its sides.
+ *
+ * Both put the export time outside the card, at the bottom of the image and centred: it is a
+ * note about the file, not a fact about the game.
+ *
+ * # Why the text is antialiased and subpixel-positioned
+ *
+ * An exported image is looked at on a screen, where a glyph drawn at a whole-pixel baseline
+ * and without antialiasing is a glyph with a staircase edge. [Paint.isSubpixelText] places a
+ * glyph at the fraction of a pixel its layout calls for, and [Paint.isLinearText] keeps the
+ * layout in its unrounded form; the two together are what makes text at this size read as text
+ * rather than as a bitmap of text.
  */
 object RecordImage {
-    /** The width of every image, in pixels. */
+    /** The width of a single record's image, in pixels. */
     private const val WIDTH = 1080
 
-    /** The margin around the content. */
+    /** The margin between the image's edge and the card. */
     private const val MARGIN = 64f
 
     /** The padding inside a card. */
     private const val PADDING = 56f
 
-    /** The corner radius of a single record's card. */
+    /** The corner radius of a card. */
     private const val CARD_RADIUS = 40f
-
-    /** The height of a single record's card, which is one line per fact plus the padding. */
-    private const val CARD_HEIGHT = 720f
-
-    /** The height of the header above a column of records. */
-    private const val COLUMN_HEADER = 260f
-
-    /** The height of one line of a column. */
-    private const val ROW_HEIGHT = 96f
-
-    /** The height of the strip below a column, where the export time is written. */
-    private const val COLUMN_FOOTER = 180f
 
     /** The plate of the mark: the background everything sits on. */
     private val plate = Color.rgb(0xEA, 0xF2, 0xF4)
@@ -90,115 +87,338 @@ object RecordImage {
     /** How a record's finish time is written. */
     private val stamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
+    /** The gap between the game's name and its parameters on the title line. */
+    private const val TITLE_GAP = 20f
+
+    /** The font size of a game's name, which is the title of either layout. */
+    private const val TITLE_SIZE = 64f
+
+    /** The font size of the parameters beside a game's name. */
+    private const val PARAMS_SIZE = 34f
+
+    /** The height of the title line. */
+    private const val TITLE_LINE = 92f
+
+    /** The font size of the time, which is the largest fact on a single card. */
+    private const val TIME_SIZE = 128f
+
+    /** The height of the time's line. */
+    private const val TIME_LINE = 172f
+
+    /** The font size of a player's name and a finish time. */
+    private const val DETAIL_SIZE = 42f
+
+    /** The height of one detail line. */
+    private const val DETAIL_LINE = 62f
+
+    /** The font size of the export time below the card. */
+    private const val EXPORT_SIZE = 30f
+
+    /** The gap between a card and the export time below it. */
+    private const val EXPORT_GAP = 48f
+
+    /** The height of the export time's line. */
+    private const val EXPORT_LINE = 40f
+
+    /** The padding of one table cell, on each side. */
+    private const val CELL_PADDING = 28f
+
+    /** The height of a table row. */
+    private const val ROW_HEIGHT = 78f
+
+    /** The height of the table's heading row. */
+    private const val HEADING_HEIGHT = 52f
+
+    /** The gap between the title of a table and its heading row. */
+    private const val TABLE_GAP = 30f
+
+    /** The font size of a table's heading row. */
+    private const val HEADING_SIZE = 32f
+
+    /** The font size of a table's body. */
+    private const val BODY_SIZE = 36f
+
+    /** The gap between a table cell's game name and its parameters. */
+    private const val CELL_GAP = 14f
+
     /**
      * Returns the image of one record.
      *
-     * [label] reads a record's parameters in the language the interface is in, so an exported
-     * card says "简单" or "Easy" for the same board rather than the storage name. [unknown]
-     * is what an unnamed player is called, for the same reason: a dash is not a word.
+     * [name] is the game's name and [params] its parameters, both in the language the
+     * interface is in, so an exported card says "简单" or "Easy" for the same board rather
+     * than the storage name. [unknown] is what an unnamed player is called, for the same
+     * reason: a dash is not a word. [durationTypeface] is the monospaced face the time is
+     * written in.
      */
     fun single(
         record: Record,
-        label: (com.qiushui1012.app.minigames.data.RecordKey) -> String,
+        name: (RecordKey) -> String,
+        params: (RecordKey) -> String,
         unknown: String,
         exportedAt: String,
+        durationTypeface: Typeface,
     ): Bitmap {
-        val height = CARD_HEIGHT.toInt()
+        val cardTop = MARGIN
+        val contentTop = cardTop + PADDING
+        val titleTop = contentTop
+        val timeTop = titleTop + TITLE_LINE
+        val playerTop = timeTop + TIME_LINE
+        val finishedTop = playerTop + DETAIL_LINE
+        val cardBottom = finishedTop + DETAIL_LINE + PADDING
+        val exportTop = cardBottom + EXPORT_GAP
+        val height = (exportTop + EXPORT_LINE + MARGIN).toInt()
+
         val bitmap = Bitmap.createBitmap(WIDTH, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.drawColor(plate)
 
-        val card = RectF(MARGIN, MARGIN, WIDTH - MARGIN, height - MARGIN)
+        val card = RectF(MARGIN, cardTop, WIDTH - MARGIN, cardBottom)
         canvas.drawRoundRect(card, CARD_RADIUS, CARD_RADIUS, paint(color = surface))
 
         val left = MARGIN + PADDING
-        val title = paint(color = ink, size = 64f, bold = true)
-        val value = paint(color = ink, size = 120f, bold = true)
-        val detail = paint(color = muted, size = 44f)
+        val title = paint(color = ink, size = TITLE_SIZE, bold = true)
+        val detail = paint(color = muted, size = DETAIL_SIZE)
+        val titleText = name(record.key)
+        canvas.text(titleText, left, titleTop, title)
+        // The parameters stand beside the name rather than under it: the name is the title of
+        // the card and the parameters qualify it, which is one line's worth of reading. They
+        // sit on the title's own baseline so that the two do not float against each other.
+        canvas.textBeside(
+            params(record.key),
+            left + title.measureText(titleText) + TITLE_GAP,
+            titleTop,
+            title,
+            paint(color = muted, size = PARAMS_SIZE),
+        )
 
-        canvas.drawText(label(record.key), left, MARGIN + 130f, title)
-        canvas.drawText(formatDuration(record.seconds), left, MARGIN + 290f, value)
-        canvas.drawText(record.playerName.ifBlank { unknown }, left, MARGIN + 370f, detail)
-        canvas.drawText(formatStamp(record.finishedAt), left, MARGIN + 434f, detail)
-        // The export time sits at the bottom of the card, below the finish time rather than
-        // beside it, with the card's own padding between them.
-        canvas.drawText(exportedAt, left, height - MARGIN - PADDING, detail)
+        canvas.text(
+            formatDuration(record.seconds),
+            left,
+            timeTop,
+            paint(color = ink, size = TIME_SIZE, bold = true, typeface = durationTypeface),
+        )
+        canvas.text(record.playerName.ifBlank { unknown }, left, playerTop, detail)
+        canvas.text(formatStamp(record.finishedAt), left, finishedTop, detail)
+
+        // Read out of the card's own geometry, so the note cannot drift onto the card.
+        canvas.centred(exportedAt, WIDTH / 2f, exportTop, paint(color = muted, size = EXPORT_SIZE))
 
         return bitmap
     }
 
     /**
-     * Returns the image of several records, one line each.
+     * Returns the image of several records, one row each.
      *
-     * The image is as tall as the records are: nothing is left out and nothing is scaled to fit
-     * a fixed frame.
+     * The table decides the image: every column is as wide as the widest of its heading and its
+     * cells, so nothing is truncated and nothing is given room it does not use. The image is
+     * therefore as wide as the table plus the card's padding and the margins, and as tall as
+     * the records require.
      */
     fun several(
         records: List<Record>,
-        label: (com.qiushui1012.app.minigames.data.RecordKey) -> String,
+        name: (RecordKey) -> String,
+        params: (RecordKey) -> String,
         unknown: String,
         exportedAt: String,
+        title: String,
         headers: List<String>,
+        durationTypeface: Typeface,
     ): Bitmap {
-        val height = severalHeight(records.size)
-        val bitmap = Bitmap.createBitmap(WIDTH, height, Bitmap.Config.ARGB_8888)
+        val headingPaint = paint(color = muted, size = HEADING_SIZE)
+        val bodyPaint = paint(color = ink, size = BODY_SIZE)
+        val timePaint = paint(color = ink, size = BODY_SIZE, typeface = durationTypeface)
+        val paramsPaint = paint(color = muted, size = PARAMS_SIZE - 2f)
+
+        // One cell per column, already reduced to the width it asks for.
+        val gameWidth: (Record) -> Float = { record ->
+            bodyPaint.measureText(name(record.key)) + CELL_GAP + paramsPaint.measureText(params(record.key))
+        }
+        val widths =
+            floatArrayOf(
+                columnWidth(headers[0].widthIn(headingPaint), records.map { it.playerName.ifBlank { unknown }.widthIn(bodyPaint) }),
+                columnWidth(headers[1].widthIn(headingPaint), records.map(gameWidth)),
+                columnWidth(headers[2].widthIn(headingPaint), records.map { formatDuration(it.seconds).widthIn(timePaint) }),
+                columnWidth(headers[3].widthIn(headingPaint), records.map { formatStamp(it.finishedAt).widthIn(bodyPaint) }),
+            )
+        val tableWidth = widths.sum()
+        val cardWidth = tableWidth + PADDING * 2
+        val imageWidth = (cardWidth + MARGIN * 2).toInt()
+
+        val cardTop = MARGIN
+        val titleTop = cardTop + PADDING
+        val headingTop = titleTop + TITLE_LINE + TABLE_GAP
+        val rowsTop = headingTop + HEADING_HEIGHT
+        val cardBottom = rowsTop + ROW_HEIGHT * records.size + PADDING
+        val exportTop = cardBottom + EXPORT_GAP
+        val height = (exportTop + EXPORT_LINE + MARGIN).toInt()
+
+        val bitmap = Bitmap.createBitmap(imageWidth, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.drawColor(plate)
 
-        val heading = paint(color = ink, size = 56f, bold = true)
-        canvas.drawText(exportedAt, MARGIN, MARGIN + 70f, heading)
+        val card = RectF(MARGIN, cardTop, imageWidth - MARGIN, cardBottom)
+        canvas.drawRoundRect(card, CARD_RADIUS, CARD_RADIUS, paint(color = surface))
 
-        // Four columns: player, game, time, finished. The widths are fractions of the usable
-        // width rather than fixed offsets, so a long game name cannot push the time off the
-        // right edge.
-        val usable = WIDTH - MARGIN * 2
-        val columns =
-            floatArrayOf(
-                MARGIN,
-                MARGIN + usable * 0.30f,
-                MARGIN + usable * 0.62f,
-                MARGIN + usable * 0.80f,
-            )
-        val column = paint(color = muted, size = 34f)
+        val tableLeft = MARGIN + PADDING
+        canvas.text(title, tableLeft, titleTop, paint(color = ink, size = TITLE_SIZE, bold = true))
+
+        var x = tableLeft
         headers.forEachIndexed { index, header ->
-            if (index < columns.size) {
-                canvas.drawText(header, columns[index], MARGIN + 156f, column)
-            }
+            canvas.cell(header, x + CELL_PADDING, headingTop, headingPaint)
+            x += widths[index]
         }
 
-        val body = paint(color = ink, size = 38f)
-        val rule = paint(color = Color.argb(60, 0x44, 0x54, 0x5A), stroke = 2f)
-
+        val rule = paint(color = Color.argb(40, 0x44, 0x54, 0x5A), stroke = 2f)
         records.forEachIndexed { index, record ->
-            val top = COLUMN_HEADER + ROW_HEIGHT * index
-            val baseline = top + 48f
-            canvas.drawText(record.playerName.ifBlank { unknown }, columns[0], baseline, body)
-            canvas.drawText(label(record.key), columns[1], baseline, body)
-            canvas.drawText(formatDuration(record.seconds), columns[2], baseline, body)
-            canvas.drawText(formatStamp(record.finishedAt), columns[3], baseline, body)
-            canvas.drawLine(MARGIN, top + ROW_HEIGHT - 12f, WIDTH - MARGIN, top + ROW_HEIGHT - 12f, rule)
+            val top = rowsTop + ROW_HEIGHT * index
+            var column = tableLeft
+            canvas.cell(record.playerName.ifBlank { unknown }, column + CELL_PADDING, top, bodyPaint)
+            column += widths[0]
+            // The game column is the single card's title line in miniature: the name, then its
+            // parameters in a smaller, muted face on the same baseline.
+            val gameName = name(record.key)
+            canvas.cell(gameName, column + CELL_PADDING, top, bodyPaint)
+            canvas.cellBeside(
+                params(record.key),
+                column + CELL_PADDING + bodyPaint.measureText(gameName) + CELL_GAP,
+                top,
+                bodyPaint,
+                paramsPaint,
+            )
+            column += widths[1]
+            canvas.cell(formatDuration(record.seconds), column + CELL_PADDING, top, timePaint)
+            column += widths[2]
+            canvas.cell(formatStamp(record.finishedAt), column + CELL_PADDING, top, bodyPaint)
+            canvas.drawLine(
+                tableLeft,
+                top + ROW_HEIGHT - 8f,
+                tableLeft + tableWidth,
+                top + ROW_HEIGHT - 8f,
+                rule,
+            )
         }
+
+        canvas.centred(exportedAt, imageWidth / 2f, exportTop, paint(color = muted, size = EXPORT_SIZE))
 
         return bitmap
     }
 
-    /** Returns the height [several] would produce, which a caller sizes its preview by. */
-    fun severalHeight(count: Int): Int = (COLUMN_HEADER + ROW_HEIGHT * count + COLUMN_FOOTER).toInt()
-
-    /** Returns the width every image has. */
+    /** Returns the width of a single record's image. */
     fun width(): Int = WIDTH
 
-    /** Builds a paint, so each call site says only what it changes. */
+    /**
+     * Returns the width a column needs: its widest cell, plus the cell padding.
+     *
+     * The heading is measured as one of the cells, so a column is never narrower than its
+     * title. [cells] are already measured widths, so the same function does for a column of
+     * plain text and for the game column, whose cell is a name and its parameters together.
+     */
+    private fun columnWidth(
+        headingWidth: Float,
+        cells: List<Float>,
+    ): Float = maxOf(headingWidth, cells.maxOrNull() ?: 0f) + CELL_PADDING * 2
+
+    /** Returns how wide a string is in a paint. */
+    private fun String.widthIn(paint: Paint): Float = paint.measureText(this)
+
+    /**
+     * Draws a string with the top of its line box at [top].
+     *
+     * The baseline is the paint's own ascent below the top, so every string is placed by the
+     * box it occupies rather than by a number guessed per call site.
+     */
+    private fun Canvas.text(
+        text: String,
+        x: Float,
+        top: Float,
+        paint: Paint,
+    ) {
+        drawText(text, x, baselineOf(top, paint), paint)
+    }
+
+    /** Draws a string on the baseline another string's line box puts its own on. */
+    private fun Canvas.textBeside(
+        text: String,
+        x: Float,
+        top: Float,
+        line: Paint,
+        paint: Paint,
+    ) {
+        drawText(text, x, baselineOf(top, line), paint)
+    }
+
+    /**
+     * Draws a table cell, vertically centred in a row whose top is [rowTop].
+     *
+     * A row is a fixed height and the faces in it are not, so a cell is placed by the middle
+     * of its own line box rather than by the top: aligning two cells of different sizes by
+     * their tops leaves one of them visibly low.
+     */
+    private fun Canvas.cell(
+        text: String,
+        x: Float,
+        rowTop: Float,
+        paint: Paint,
+    ) {
+        val metrics = paint.fontMetrics
+        val top = rowTop + (ROW_HEIGHT - (metrics.descent - metrics.ascent)) / 2f
+        drawText(text, x, top - metrics.ascent, paint)
+    }
+
+    /** Draws a table cell's second string on the same baseline as its first. */
+    private fun Canvas.cellBeside(
+        text: String,
+        x: Float,
+        rowTop: Float,
+        line: Paint,
+        paint: Paint,
+    ) {
+        val metrics = line.fontMetrics
+        val top = rowTop + (ROW_HEIGHT - (metrics.descent - metrics.ascent)) / 2f
+        drawText(text, x, top - metrics.ascent, paint)
+    }
+
+    /** Returns the baseline a line whose box starts at [top] is drawn on. */
+    private fun baselineOf(
+        top: Float,
+        paint: Paint,
+    ): Float = top - paint.fontMetrics.ascent
+
+    /** Draws a string centred on [centreX] with the top of its line box at [top]. */
+    private fun Canvas.centred(
+        text: String,
+        centreX: Float,
+        top: Float,
+        paint: Paint,
+    ) {
+        drawText(text, centreX - paint.measureText(text) / 2f, baselineOf(top, paint), paint)
+    }
+
+    /**
+     * Builds a paint, so each call site says only what it changes.
+     *
+     * The antialiasing smooths a glyph's edges, and the subpixel flag places each of them at
+     * the fraction of a pixel its layout calls for instead of snapping it to whole pixels —
+     * at these sizes that is the difference between text and a staircase of text.
+     */
     private fun paint(
         color: Int,
         size: Float = 40f,
         bold: Boolean = false,
         stroke: Float = 0f,
+        typeface: Typeface? = null,
     ): Paint =
-        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
             this.color = color
             textSize = size
-            typeface = if (bold) Typeface.create(Typeface.DEFAULT, Typeface.BOLD) else Typeface.DEFAULT
+            isSubpixelText = true
+            isFilterBitmap = true
+            this.typeface =
+                when {
+                    typeface != null -> if (bold) Typeface.create(typeface, Typeface.BOLD) else typeface
+                    bold -> Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    else -> Typeface.DEFAULT
+                }
             if (stroke > 0f) {
                 style = Paint.Style.STROKE
                 strokeWidth = stroke

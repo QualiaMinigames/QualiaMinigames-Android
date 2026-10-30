@@ -119,3 +119,8 @@ CI 从仓库 Secrets 写出同一个文件，见 `.github/workflows/`。
 ## 许可
 
 本项目按 **Apache License 2.0** 授权，全文见 `LICENSE`。
+
+APK 内的 `app/src/main/res/font/cascadia_code.ttf` 是 Cascadia Code 的子集，只含
+`0123456789-'":` 十四个字符，用于显示用时。Cascadia Code 以
+[SIL Open Font License 1.1](https://scripts.sil.org/OFL) 授权，子集的版权归 Microsoft
+Corporation 所有。

@@ -125,3 +125,8 @@ Commit messages are in English and follow
 ## License
 
 Licensed under the **Apache License 2.0**; see `LICENSE`.
+
+`app/src/main/res/font/cascadia_code.ttf` in the APK is a subset of Cascadia Code holding
+only `0123456789-'":`, the fourteen characters a duration is written with. Cascadia Code is
+licensed under the [SIL Open Font License 1.1](https://scripts.sil.org/OFL); the subset is
+copyright Microsoft Corporation.
