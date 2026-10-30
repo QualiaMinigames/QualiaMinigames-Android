@@ -306,6 +306,13 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    buildFeatures {
+        // The settings screen shows the version this build was made with, and reading it from
+        // the generated configuration is what keeps the two from drifting: a version typed
+        // into a Kotlin constant is a second copy of a fact the manifest already holds.
+        buildConfig = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

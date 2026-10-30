@@ -14,8 +14,16 @@
 
 package com.qiushui1012.app.minigames.ui
 
-/** The version this build reports, which the settings screen shows. */
-const val BuildVersion: String = "0.1.0"
+import com.qiushui1012.app.minigames.BuildConfig
+
+/**
+ * The version this build reports, which the settings screen shows.
+ *
+ * It is read from the manifest the build wrote rather than typed here: a version stated twice
+ * is a version that drifts, and the copy in this file stayed at the version it was first
+ * written with while the manifest moved on.
+ */
+val BuildVersion: String = BuildConfig.VERSION_NAME
 
 /** Where the source of this application lives, which the settings screen shows. */
 const val RepositoryUrl: String = "https://github.com/QualiaMinigames/QualiaMinigames-Android"
