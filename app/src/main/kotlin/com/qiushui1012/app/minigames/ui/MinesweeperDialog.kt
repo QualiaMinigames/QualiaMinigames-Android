@@ -138,6 +138,25 @@ fun MinesweeperNewGameDialog(
         minesText = formatPerMille(perMille)
     }
 
+    /**
+     * Keeps the field and the helper line in step with a change of shape or of rules.
+     *
+     * The share is the thing the form holds, so a change of width, height or mode does not
+     * move it: the mine count it comes to follows the board. What has to be rewritten is the
+     * field, and only when it is spelling a count, because a count is a number about a board
+     * of a particular size and the size has just changed.
+     *
+     * [newCells] is the shape being moved to, passed rather than read from the state the
+     * caller is about to write: a Compose state read in the same event still holds its old
+     * value.
+     */
+    fun afterShapeChange(newCells: Int) {
+        perMille = clampPerMille(perMille)
+        if (typedCount) {
+            minesText = minesForPerMille(newCells, perMille).toString()
+        }
+    }
+
     ModalForm(
         title = stringResource(R.string.dialog_new_game_title),
         onDismiss = onDismiss,
@@ -174,7 +193,10 @@ fun MinesweeperNewGameDialog(
                         widthText = width.toString()
                         height = preset.height
                         heightText = height.toString()
-                        perMille = clampPerMille(preset.perMille)
+                        // A preset states the density it is named for, so the share is set
+                        // rather than kept, and the field is rewritten whatever it was
+                        // spelling: a count typed against the last board is not this one's.
+                        perMille = preset.perMille.coerceIn(sliderMin, inputPerMilleMax(mode))
                         showShare()
                     }
                 }
@@ -191,14 +213,14 @@ fun MinesweeperNewGameDialog(
                     widthText.toIntOrNull()?.let { typedWidth ->
                         if (typedWidth in minimum..maximum) {
                             width = typedWidth
-                            perMille = clampPerMille(perMille)
+                            afterShapeChange(typedWidth * height)
                         }
                     }
                 },
                 onSlider = {
                     width = it
                     widthText = it.toString()
-                    perMille = clampPerMille(perMille)
+                    afterShapeChange(it * height)
                 },
             )
 
@@ -213,14 +235,14 @@ fun MinesweeperNewGameDialog(
                     heightText.toIntOrNull()?.let { typedHeight ->
                         if (typedHeight in minimum..maximum) {
                             height = typedHeight
-                            perMille = clampPerMille(perMille)
+                            afterShapeChange(width * typedHeight)
                         }
                     }
                 },
                 onSlider = {
                     height = it
                     heightText = it.toString()
-                    perMille = clampPerMille(perMille)
+                    afterShapeChange(width * it)
                 },
             )
 
@@ -274,11 +296,17 @@ fun MinesweeperNewGameDialog(
             Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
                 ChoiceButton(stringResource(R.string.minesweeper_mode_normal), mode == MinesweeperMode.Normal) {
                     mode = MinesweeperMode.Normal
+                    // The no-guess ceiling is lower than the normal one only on the way in,
+                    // so a share the chosen rules no longer allow is pulled back to the edge
+                    // they do allow — and the field, which shows the share, is rewritten with
+                    // it rather than left saying the old value.
                     perMille = clampPerMille(perMille)
+                    showShare()
                 }
                 ChoiceButton(stringResource(R.string.minesweeper_mode_no_guess), mode == MinesweeperMode.NoGuess) {
                     mode = MinesweeperMode.NoGuess
                     perMille = clampPerMille(perMille)
+                    showShare()
                 }
             }
             Text(
