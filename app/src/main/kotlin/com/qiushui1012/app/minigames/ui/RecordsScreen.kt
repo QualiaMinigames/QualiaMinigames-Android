@@ -642,12 +642,16 @@ fun RecordDetailDialog(
                         )
                     }
                 }
-            }
-            if (record.typedSeed) {
-                LabeledValue(
-                    stringResource(R.string.records_detail_seed),
-                    stringResource(R.string.records_typed_seed),
-                )
+                // The hand-typed mark belongs to the seed it describes, so it sits under the
+                // seed rather than in a field of its own: a second label would read as a
+                // second fact rather than as a note about this one.
+                if (record.typedSeed) {
+                    Text(
+                        stringResource(R.string.records_typed_seed),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
