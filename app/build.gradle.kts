@@ -42,8 +42,14 @@ plugins {
 // The materialized copy is only reused when it is the version this build asks for,
 // otherwise a version bump would silently keep building the old crate.
 
-val ffiCrateVersion = providers.gradleProperty("qualia.minigames.ffi.version").getOrElse("0.1.0")
-val ffiCrateSha256 = providers.gradleProperty("qualia.minigames.ffi.sha256").orNull
+// The published FFI this build asks for, and the digest the registry publishes for it. The
+// digest is checked once the archive is on disk: a build that fetched a substituted or
+// truncated file would otherwise compile something nobody reviewed.
+val ffiCrateVersion = providers.gradleProperty("qualia.minigames.ffi.version").getOrElse("0.1.1")
+val ffiCrateSha256 =
+    providers
+        .gradleProperty("qualia.minigames.ffi.sha256")
+        .getOrElse("8605e8e3ce50344007e987637ac660cd3fa4fb5de76a643cb48b50d404616415")
 val ffiLocalDir = providers.gradleProperty("qualia.minigames.ffi.localDir").orNull
 val rustSourceDir = ffiLocalDir?.let { rootProject.file(it) } ?: layout.projectDirectory.dir("rust").asFile
 val rustManifest = rustSourceDir.resolve("Cargo.toml")
@@ -92,14 +98,12 @@ val materializeRustSource =
                     "https://static.crates.io/crates/qualia-minigames-ffi/qualia-minigames-ffi-$ffiCrateVersion.crate",
                 ).toURL().openStream().use { input -> crateFile.outputStream().use { output -> input.copyTo(output) } }
             }
-            ffiCrateSha256?.let { expected ->
-                val actual =
-                    MessageDigest.getInstance("SHA-256")
-                        .digest(crateFile.readBytes())
-                        .joinToString("") { "%02x".format(it) }
-                require(actual == expected) {
-                    "qualia-minigames-ffi $ffiCrateVersion has SHA-256 $actual, expected $expected"
-                }
+            val actual =
+                MessageDigest.getInstance("SHA-256")
+                    .digest(crateFile.readBytes())
+                    .joinToString("") { "%02x".format(it) }
+            require(actual == ffiCrateSha256) {
+                "qualia-minigames-ffi $ffiCrateVersion has SHA-256 $actual, expected $ffiCrateSha256"
             }
             if (rustSourceDir.exists()) {
                 rustSourceDir.deleteRecursively()

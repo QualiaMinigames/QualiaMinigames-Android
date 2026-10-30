@@ -58,7 +58,7 @@ QualiaMinigames/               （工作区根，三个仓库平铺）
 # 方式一：指向本地 FFI 仓库（推荐，改动立即生效）
 ./gradlew :app:assembleDebug "-Pqualia.minigames.ffi.localDir=../FFI"
 
-# 方式二：不传参数，构建会下载 crates.io 上 qualia-minigames-ffi 0.1.0 到 app/rust/
+# 方式二：不传参数，构建会下载 crates.io 上 qualia-minigames-ffi 0.1.1 到 app/rust/
 ./gradlew :app:assembleDebug
 ```
 

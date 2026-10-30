@@ -60,7 +60,7 @@ either of these makes the change visible here:
 # Point at a local FFI checkout (recommended: the change is visible immediately)
 ./gradlew :app:assembleDebug "-Pqualia.minigames.ffi.localDir=../FFI"
 
-# Without the property, the build downloads qualia-minigames-ffi 0.1.0 from crates.io into app/rust/
+# Without the property, the build downloads qualia-minigames-ffi 0.1.1 from crates.io into app/rust/
 ./gradlew :app:assembleDebug
 ```
 
