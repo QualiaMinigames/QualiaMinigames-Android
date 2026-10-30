@@ -89,8 +89,14 @@ class RecordsStore(private val store: DataStore<RecordsFile>) {
     /** Returns the unfinished game of a kind, if there is one. */
     fun save(kind: GameKind): Flow<SavedGame?> = store.data.map { file -> file.saves.firstOrNull { it.kind == kind } }
 
-    /** Returns the best time of a key, in whole seconds. */
-    fun best(key: RecordKey): Flow<Long?> = store.data.map { file -> file.records.filter { it.key == key }.minOfOrNull { it.seconds } }
+    /**
+     * Returns the best time of a key, in whole seconds.
+     *
+     * Only finished games count: a lost game has a time, but it is the time until the mine was
+     * opened, and comparing it with a cleared board would make losing the way to a best time.
+     */
+    fun best(key: RecordKey): Flow<Long?> =
+        store.data.map { file -> file.records.filter { it.key == key && it.failed != true }.minOfOrNull { it.seconds } }
 
     /** Adds a finished game and clears the save of the game it belongs to. */
     suspend fun addRecord(record: Record) {
@@ -98,6 +104,7 @@ class RecordsStore(private val store: DataStore<RecordsFile>) {
             when (record.key) {
                 is RecordKey.Pipes -> GameKind.Pipes
                 is RecordKey.Sudoku -> GameKind.Sudoku
+                is RecordKey.Minesweeper -> GameKind.Minesweeper
             }
         store.updateData { file ->
             file.copy(

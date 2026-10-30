@@ -16,6 +16,9 @@ package com.qiushui1012.app.minigames
 
 import com.qiushui1012.app.minigames.data.GameKind
 import com.qiushui1012.app.minigames.data.RecordKey
+import com.qiushui1012.app.minigames.rules.MinesweeperBoard
+import com.qiushui1012.app.minigames.rules.MinesweeperMode
+import com.qiushui1012.app.minigames.rules.MinesweeperPhase
 import com.qiushui1012.app.minigames.rules.PipesBoard
 import com.qiushui1012.app.minigames.rules.PipesLayout
 import com.qiushui1012.app.minigames.rules.SudokuBoard
@@ -46,12 +49,19 @@ sealed interface GameInProgress {
     /** The seed the puzzle was generated from, which a finished game's record keeps. */
     val seed: Long
 
+    /** Whether the seed was typed by the player rather than generated. */
+    val typedSeed: Boolean
+
+    /** Whether the clock waits for the first move, which only minesweeper does. */
+    val waitsForFirstMove: Boolean get() = false
+
     /** A pipes game. */
     data class Pipes(
         /** The board. */
         val board: PipesBoard,
         override val playerName: String,
         override val elapsedSeconds: Long,
+        override val typedSeed: Boolean = false,
     ) : GameInProgress {
         override val kind: GameKind = GameKind.Pipes
 
@@ -66,12 +76,51 @@ sealed interface GameInProgress {
         val board: SudokuBoard,
         override val playerName: String,
         override val elapsedSeconds: Long,
+        override val typedSeed: Boolean = false,
     ) : GameInProgress {
         override val kind: GameKind = GameKind.Sudoku
 
         override val key: RecordKey = RecordKey.Sudoku(board.difficulty.toStorageName())
 
         override val seed: Long get() = board.seed
+    }
+
+    /**
+     * A minesweeper game.
+     *
+     * The clock waits for the first cell to be opened, which is why the screen reads
+     * [waitsForFirstMove]: a board that does not exist yet is not a board a player is playing.
+     */
+    data class Minesweeper(
+        /** The board. */
+        val board: MinesweeperBoard,
+        override val playerName: String,
+        override val elapsedSeconds: Long,
+        override val typedSeed: Boolean = false,
+    ) : GameInProgress {
+        override val kind: GameKind = GameKind.Minesweeper
+
+        // The key is read from the board rather than captured: whether a game fell back is only
+        // known after its first click, and a key built before that would file every game as
+        // the rules the player asked for rather than the board they played.
+        override val key: RecordKey
+            get() =
+                RecordKey.Minesweeper(
+                    width = board.width,
+                    height = board.height,
+                    mines = board.mineCount,
+                    // A game that fell back is filed as the normal board it turned out to be: a
+                    // record that claimed the no-guess rules for a board that needed a guess
+                    // would be a record of a game nobody played.
+                    noGuess = board.mode == MinesweeperMode.NoGuess && !board.fellBack,
+                )
+
+        override val seed: Long get() = board.seed
+
+        // A minesweeper board is not laid down until the first cell is opened, so the clock
+        // starts with that opening rather than with the screen: a player who is still reading
+        // the board is not being timed.
+        override val waitsForFirstMove: Boolean get() = board.phase == MinesweeperPhase.Pending
     }
 }
 
@@ -81,6 +130,20 @@ fun SudokuDifficulty.toStorageName(): String =
         SudokuDifficulty.Easy -> "easy"
         SudokuDifficulty.Medium -> "medium"
         SudokuDifficulty.Hard -> "hard"
+    }
+
+/** Returns the name the mode is stored under, which is the settings' own name. */
+fun MinesweeperMode.toStorageName(): String =
+    when (this) {
+        MinesweeperMode.Normal -> "normal"
+        MinesweeperMode.NoGuess -> "no_guess"
+    }
+
+/** Returns the mode a stored name names, or normal when it names none. */
+fun minesweeperModeFromStorageName(name: String): MinesweeperMode =
+    when (name) {
+        "no_guess" -> MinesweeperMode.NoGuess
+        else -> MinesweeperMode.Normal
     }
 
 /** Returns the difficulty a stored name names, or easy when it names none. */

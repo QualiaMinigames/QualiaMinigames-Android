@@ -40,6 +40,25 @@ sealed interface RecordKey {
         /** The difficulty, by the core's own name. */
         val difficulty: String,
     ) : RecordKey
+
+    /**
+     * A minesweeper game, identified by its board, its mines and its rules.
+     *
+     * All four take part in the comparison: two boards of the same size with different mine
+     * counts are different games, and a no-guess board is not comparable with one that may
+     * need a guess.
+     */
+    @Serializable
+    data class Minesweeper(
+        /** The number of cells across. */
+        val width: Int,
+        /** The number of cells down. */
+        val height: Int,
+        /** How many mines the board holds. */
+        val mines: Int,
+        /** Whether the board was generated under the no-guess rules. */
+        val noGuess: Boolean,
+    ) : RecordKey
 }
 
 /** One finished game. */
@@ -62,6 +81,21 @@ data class Record(
      * split that group into one group per puzzle.
      */
     val seed: Long? = null,
+    /**
+     * Whether the game was lost, or null for a record written before losses were kept.
+     *
+     * A null means the game was finished, which is what every record older than this field
+     * was: a loss was not recorded at all. The distinction is what a best time is computed
+     * from, so an older record is read as a win rather than as an unknown.
+     */
+    val failed: Boolean? = null,
+    /**
+     * Whether the seed was typed by the player rather than generated.
+     *
+     * A record keeps this so that a history can say where a puzzle came from: a seed a player
+     * chose is a different thing from one the clock produced, even though both are numbers.
+     */
+    val typedSeed: Boolean = false,
 ) {
     /**
      * Returns a stable identifier for this record.
@@ -117,10 +151,14 @@ data class SavedGame(
     }
 }
 
-/** Which of the two games a saved game belongs to. */
+/** Which of the three games a saved game belongs to. */
 enum class GameKind {
     /** Pipes. */
     Pipes,
+
     /** Sudoku. */
     Sudoku,
+
+    /** Minesweeper. */
+    Minesweeper,
 }

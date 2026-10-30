@@ -79,6 +79,14 @@ data class Settings(
     val lastPipesWrapped: Boolean = false,
     /** The difficulty the last sudoku game was started with. */
     val lastSudokuDifficulty: String = "easy",
+    /** The width the last minesweeper game was started with. */
+    val lastMinesweeperWidth: Int = 9,
+    /** The height the last minesweeper game was started with. */
+    val lastMinesweeperHeight: Int = 9,
+    /** The mine density the last minesweeper game was started with, in thousandths of a percent. */
+    val lastMinesweeperPercent: String = "123",
+    /** The mode the last minesweeper game was started with, by its storage name. */
+    val lastMinesweeperMode: String = "normal",
 )
 
 /**
@@ -112,6 +120,10 @@ class SettingsStore(private val store: DataStore<Preferences>) {
                     lastPipesSize = preferences[Keys.lastPipesSize]?.toIntOrNull() ?: 9,
                     lastPipesWrapped = preferences[Keys.lastPipesWrapped] ?: false,
                     lastSudokuDifficulty = preferences[Keys.lastSudokuDifficulty] ?: "easy",
+                    lastMinesweeperWidth = preferences[Keys.lastMinesweeperWidth]?.toIntOrNull() ?: 9,
+                    lastMinesweeperHeight = preferences[Keys.lastMinesweeperHeight]?.toIntOrNull() ?: 9,
+                    lastMinesweeperPercent = preferences[Keys.lastMinesweeperPercent] ?: "123",
+                    lastMinesweeperMode = preferences[Keys.lastMinesweeperMode] ?: "normal",
                 )
             }
 
@@ -159,6 +171,21 @@ class SettingsStore(private val store: DataStore<Preferences>) {
         store.edit { it[Keys.lastSudokuDifficulty] = difficulty }
     }
 
+    /**
+     * Writes the parameters the next minesweeper game starts with.
+     *
+     * They are remembered as they are played for the same reason the pipes size is: starting a
+     * game with a shape is the statement of what the player wants next time.
+     */
+    suspend fun setLastMinesweeper(width: Int, height: Int, percent: String, mode: String) {
+        store.edit {
+            it[Keys.lastMinesweeperWidth] = width.toString()
+            it[Keys.lastMinesweeperHeight] = height.toString()
+            it[Keys.lastMinesweeperPercent] = percent
+            it[Keys.lastMinesweeperMode] = mode
+        }
+    }
+
     /** The keys the settings are stored under. */
     private object Keys {
         /** The default player name. */
@@ -184,6 +211,18 @@ class SettingsStore(private val store: DataStore<Preferences>) {
 
         /** The difficulty of the last sudoku game. */
         val lastSudokuDifficulty = stringPreferencesKey("last_sudoku_difficulty")
+
+        /** The width of the last minesweeper game. */
+        val lastMinesweeperWidth = stringPreferencesKey("last_minesweeper_width")
+
+        /** The height of the last minesweeper game. */
+        val lastMinesweeperHeight = stringPreferencesKey("last_minesweeper_height")
+
+        /** The mine density of the last minesweeper game. */
+        val lastMinesweeperPercent = stringPreferencesKey("last_minesweeper_percent")
+
+        /** The mode of the last minesweeper game. */
+        val lastMinesweeperMode = stringPreferencesKey("last_minesweeper_mode")
     }
 }
 
