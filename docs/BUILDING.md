@@ -65,17 +65,17 @@ gh secret set ANDROID_KEY_PASSWORD --repo QualiaMinigames/QualiaMinigames-Androi
 
 ```powershell
 # 1. Core：推标签，CI 校验后发布到 crates.io
-git -C ..\Core tag -a v0.1.1 -m "qualia-minigames-core 0.1.1"
-git -C ..\Core push origin v0.1.1
+git -C ..\Core tag -a v0.2.0 -m "qualia-minigames-core 0.2.0"
+git -C ..\Core push origin v0.2.0
 
 # 2. FFI：等 crates.io 上出现 Core 的版本后，再推 FFI 的标签
-git -C ..\FFI tag -a v0.1.1 -m "qualia-minigames-ffi 0.1.1"
-git -C ..\FFI push origin v0.1.1
+git -C ..\FFI tag -a v0.2.0 -m "qualia-minigames-ffi 0.2.0"
+git -C ..\FFI push origin v0.2.0
 
 # 3. Android：等 crates.io 上出现 FFI 的版本后，推本仓库并推标签
 git push origin main
-git tag -a v0.1.0 -m "QualiaMinigames-Android 0.1.0"
-git push origin v0.1.0
+git tag -a v0.2.0 -m "QualiaMinigames-Android 0.2.0"
+git push origin v0.2.0
 ```
 
 本仓库的 CI 默认从 crates.io 取 `qualia-minigames-ffi`，与发布构建看到的是同一份来源。
