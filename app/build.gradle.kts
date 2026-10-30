@@ -401,6 +401,14 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
     dependsOn(generateUniffiBindings)
 }
 
+// The staged libraries are a `jniLibs` source directory, which the source set alone does not
+// make the Android plugin build: a clean checkout packaged an APK with no
+// `libqualia_minigames_ffi.so` in it, and the application failed to load its own rules at the
+// first board. The merge is the task that reads the directory, so it is the one told to wait.
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders") }.configureEach {
+    dependsOn(buildRustLibrary)
+}
+
 tasks.named("preBuild") {
     dependsOn(generateUniffiBindings)
 }
