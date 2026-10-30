@@ -507,9 +507,9 @@ private fun RecordGroup(
 /**
  * The line under a record's player: when it finished, and how it was started.
  *
- * A loss and a hand-picked seed are the two facts a list of times cannot show, so both are
- * written here rather than left to the detail dialog: a player comparing two rows of one card
- * should not have to open each of them to find out why one of the times is short.
+ * A hand-picked seed is a fact a list of times cannot show, so it is written here rather than
+ * left to the detail dialog. The outcome is not repeated here: it is the time column beside
+ * this line that says "failed", and a row that said it twice would say nothing twice.
  */
 @Composable
 private fun RecordMarks(record: Record) {
@@ -519,13 +519,6 @@ private fun RecordMarks(record: Record) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (record.failed == true) {
-            Text(
-                stringResource(R.string.records_failed),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
         if (record.typedSeed) {
             Text(
                 stringResource(R.string.records_typed_seed),
@@ -761,16 +754,6 @@ fun keyLabel(key: RecordKey): String =
                 ),
             )
     }
-
-/** Returns the label of a minesweeper mode. */
-@Composable
-fun minesweeperModeLabel(mode: com.qiushui1012.app.minigames.rules.MinesweeperMode): String =
-    stringResource(
-        when (mode) {
-            com.qiushui1012.app.minigames.rules.MinesweeperMode.Normal -> R.string.minesweeper_mode_normal
-            com.qiushui1012.app.minigames.rules.MinesweeperMode.NoGuess -> R.string.minesweeper_mode_no_guess
-        },
-    )
 
 /** Returns a duration as `m:ss`, or `h:mm:ss` past an hour. */
 fun formatDuration(seconds: Long): String {

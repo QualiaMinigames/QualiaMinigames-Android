@@ -64,9 +64,7 @@ import kotlinx.coroutines.launch
 private const val SLIDER_MAX_SIZE = 35
 
 /** The most digits a size field accepts, which is what the largest board needs. */
-private const val MAX_SIZE_DIGITS = 3
-
-/**
+private const val MAX_SIZE_DIGITS = 3/**
  * The dialog that starts a minesweeper game.
  *
  * # The order of the controls
@@ -344,6 +342,9 @@ private fun SizeControl(
         onValueChange = onText,
         label = { Text(label) },
         singleLine = true,
+        // The field is wrong only when its value is outside the board's range. A value above
+        // the slider's range is a size the board accepts, so it is not an error: the slider
+        // simply sits at its end, which is what the note below says.
         isError = text.toIntOrNull()?.let { it !in minimum..maximum } ?: true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         modifier = Modifier.fillMaxWidth(),

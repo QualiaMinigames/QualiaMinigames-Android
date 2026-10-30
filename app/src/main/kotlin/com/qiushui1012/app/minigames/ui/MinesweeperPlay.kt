@@ -58,6 +58,7 @@ import com.qiushui1012.app.minigames.rules.MinesweeperPhase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The colour a covered cell is drawn in.
@@ -197,17 +198,18 @@ fun MinesweeperPlay(
         }
         busy = true
         scope.launch {
-            val work =
-                launch(Dispatchers.Default) {
-                    board.reveal(index)
-                }
-            launch {
-                delay(GENERATING_MILLIS)
-                if (busy) {
+            // The notice is a child of this coroutine rather than a second one in the same
+            // scope: cancelling it is what guarantees a board generated quickly never leaves
+            // the word on screen after its own work has finished.
+            val noticeJob =
+                launch {
+                    delay(GENERATING_MILLIS)
                     notice = true
                 }
+            withContext(Dispatchers.Default) {
+                board.reveal(index)
             }
-            work.join()
+            noticeJob.cancel()
             busy = false
             notice = false
             refresh()
@@ -265,11 +267,6 @@ fun MinesweeperPlay(
                 columns = width,
                 rows = height,
                 onTap = { row, column -> open(row * width + column) },
-                onLongPress = { _, _ ->
-                    // A long press with no movement opens its cell; the callback below carries
-                    // that opening, because it is also the one that knows how far the finger
-                    // moved. Doing it here as well would open every cell a player flags.
-                },
                 onPressChanged = { row, column, distanceDp, released ->
                     val index = row?.let { it * width + column }
                     if (released) {

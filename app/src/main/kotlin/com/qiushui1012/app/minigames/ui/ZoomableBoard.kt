@@ -95,21 +95,23 @@ fun ZoomableBoard(
     modifier: Modifier = Modifier,
     /** Called with the cell under a tap. */
     onTap: (row: Int, column: Int) -> Unit = { _, _ -> },
-    /** Called with the cell under a long press, once the press has taken hold. */
+    /**
+     * Called with the cell under a long press, once the press has taken hold.
+     *
+     * A board that reports the press itself through [onPressChanged] leaves this alone, so
+     * that one gesture is not reported twice.
+     */
     onLongPress: (row: Int, column: Int) -> Unit = { _, _ -> },
     /**
      * Called while a long press is held and again when it is released.
      *
      * [row] and [column] are the cell the press started on, or null when it started off the
      * board; [distanceDp] is how far the finger has travelled since; [released] says whether
-     * this call is the release. A board that only needs a press and a tap leaves this alone:
-     * the two callbacks above are what the pipes and sudoku boards use.
-     *
-     * The callback is what a board that turns a long press into a drag listens to, because a
-     * press that becomes a drag is not a long press and not a tap, and a board that read it as
-     * either would act twice on one gesture.
+     * this call is the release. A board that turns a long press into a drag listens to this
+     * instead of to [onLongPress]: a press that becomes a drag is not a tap, and a board that
+     * read it as either would act twice on one gesture.
      */
-    onPressChanged: (row: Int?, column: Int, distanceDp: Float, released: Boolean) -> Unit = { _, _, _, _ -> },
+    onPressChanged: ((row: Int?, column: Int, distanceDp: Float, released: Boolean) -> Unit)? = null,
 ) {
     val density = LocalDensity.current
     // Read outside the canvas: a DrawScope is not a composable scope, so a theme value has to
@@ -152,7 +154,7 @@ fun ZoomableBoard(
                 .fillMaxSize()
                 // The size of the box is what drawing and hit testing both measure against.
                 .onSizeChanged { view = it }
-                .pointerInput(boardWidth, boardHeight, rows, columns) {
+                .pointerInput(boardWidth, boardHeight, rows, columns, pressChanged != null) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val startedAt = down.position
@@ -201,22 +203,26 @@ fun ZoomableBoard(
                             }
 
                         if (longPress == true) {
-                            // The press is reported at once, so a board can show it before it
-                            // knows whether the finger will drag: the report is the start of a
-                            // gesture that may become a flag.
                             val pressedCell =
                                 cellAt(startedAt, view, boardWidth, boardHeight, currentZoom, currentPan, rows, columns)
-                            pressChanged(pressedCell?.first, pressedCell?.second ?: 0, 0f, false)
-                            pressedCell?.let { (row, column) -> pressHandler(row, column) }
-                            // The rest of the gesture is read rather than drained: a press that
-                            // drags is a different action, and the distance travelled is what
-                            // says which of the two the player meant.
+                            // A board that says it follows the press itself gets the press and
+                            // the drag that may follow it; one that does not gets a single
+                            // long-press report, which is what the pipes and sudoku boards use.
+                            val tracker = pressChanged
+                            if (tracker == null) {
+                                pressedCell?.let { (row, column) -> pressHandler(row, column) }
+                                while (awaitPointerEvent(PointerEventPass.Main).changes.any { it.pressed }) {
+                                    // Drain the rest of the gesture.
+                                }
+                                return@awaitEachGesture
+                            }
+                            tracker(pressedCell?.first, pressedCell?.second ?: 0, 0f, false)
                             var lastPosition = startedAt
                             while (true) {
                                 val event = awaitPointerEvent(PointerEventPass.Main)
                                 val pressed = event.changes.filter { it.pressed }
                                 if (pressed.isEmpty()) {
-                                    pressChanged(
+                                    tracker(
                                         pressedCell?.first,
                                         pressedCell?.second ?: 0,
                                         (lastPosition - startedAt).getDistance() / densityValue,
@@ -225,7 +231,7 @@ fun ZoomableBoard(
                                     break
                                 }
                                 lastPosition = event.calculateCentroid(useCurrent = true) ?: lastPosition
-                                pressChanged(
+                                tracker(
                                     pressedCell?.first,
                                     pressedCell?.second ?: 0,
                                     (lastPosition - startedAt).getDistance() / densityValue,
