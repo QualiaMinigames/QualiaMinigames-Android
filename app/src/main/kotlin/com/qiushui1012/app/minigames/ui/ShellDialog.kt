@@ -90,6 +90,17 @@ fun ShellDialogContent(
                             onStartGame(it)
                         },
                     )
+
+                GameKind.Minesweeper ->
+                    MinesweeperNewGameDialog(
+                        container = container,
+                        settings = settings,
+                        onDismiss = onDismiss,
+                        onStart = {
+                            onDismiss()
+                            onStartGame(it)
+                        },
+                    )
             }
 
         is ShellDialog.DiscardSave ->

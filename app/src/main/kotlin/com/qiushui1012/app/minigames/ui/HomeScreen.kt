@@ -43,23 +43,30 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.qiushui1012.app.minigames.AlertDark
+import com.qiushui1012.app.minigames.AlertLight
 import com.qiushui1012.app.minigames.AppContainer
 import com.qiushui1012.app.minigames.GameInProgress
 import com.qiushui1012.app.minigames.R
 import com.qiushui1012.app.minigames.Space
 import com.qiushui1012.app.minigames.difficultyFromStorageName
 import com.qiushui1012.app.minigames.data.GameKind
+import com.qiushui1012.app.minigames.data.RecordKey
 import com.qiushui1012.app.minigames.data.SavedGame
 import com.qiushui1012.app.minigames.data.Settings
+import com.qiushui1012.app.minigames.minesweeperModeFromStorageName
+import com.qiushui1012.app.minigames.rules.MinesweeperMode
 import com.qiushui1012.app.minigames.rules.PipesLayout
 import com.qiushui1012.app.minigames.rules.Rules
 import com.qiushui1012.app.minigames.rules.SudokuDifficulty
 
-/**
+/** The density a card shows when the settings hold a value the field would have refused. */
+private const val DEFAULT_MINESWEEPER_PERCENT = 123/**
  * The narrowest a game card may be drawn before the grid uses fewer columns.
  *
  * A phone held upright is about 400 dp across, and its two cards side by side are about 185 dp
@@ -104,6 +111,20 @@ fun HomeScreen(
 ) {
     val pipesSave by container.records.save(GameKind.Pipes).collectAsStateWithLifecycle(initialValue = null)
     val sudokuSave by container.records.save(GameKind.Sudoku).collectAsStateWithLifecycle(initialValue = null)
+    val minesweeperSave by container.records.save(GameKind.Minesweeper).collectAsStateWithLifecycle(initialValue = null)
+
+    // The minesweeper card's summary is read back from the parameters the settings kept, so
+    // that the card and the dialog that produced it cannot describe the same game in two
+    // ways. A value the field would have refused is read as the default, because a corrupt
+    // setting must not draw a card that says nothing.
+    val minesweeperPercent = settings.lastMinesweeperPercent.toIntOrNull() ?: DEFAULT_MINESWEEPER_PERCENT
+    val minesweeperCells = settings.lastMinesweeperWidth * settings.lastMinesweeperHeight
+    val minesweeperMines =
+        if (minesweeperCells > 0) {
+            Rules.minesweeperMinesForPerMille(minesweeperCells, minesweeperPercent)
+        } else {
+            0
+        }
 
     val entries =
         listOf(
@@ -130,13 +151,29 @@ fun HomeScreen(
                     ),
                 save = sudokuSave,
             ),
+            GameEntry(
+                kind = GameKind.Minesweeper,
+                name = stringResource(R.string.home_minesweeper_name),
+                summary =
+                    keyLabel(
+                        RecordKey.Minesweeper(
+                            width = settings.lastMinesweeperWidth,
+                            height = settings.lastMinesweeperHeight,
+                            mines = minesweeperMines,
+                            noGuess = minesweeperModeFromStorageName(settings.lastMinesweeperMode) == MinesweeperMode.NoGuess,
+                        ),
+                    ),
+                save = minesweeperSave,
+            ),
         )
 
     Box(modifier = Modifier.fillMaxSize()) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             // A card keeps at least [GameCardMinWidth] and the grid fills the window with them:
-            // two side by side on a tablet, one on a phone held upright.
-            val columns = (maxWidth / GameCardMinWidth).toInt().coerceIn(1, entries.size)
+            // two side by side on a phone held upright and three on a window wide enough for
+            // it. The last row is padded with spacers of the same weight, so the cards of a
+            // row are the same width whether the row is full or not.
+            val columns = (maxWidth / GameCardMinWidth).toInt().coerceIn(2.coerceAtMost(entries.size), entries.size)
             Column(
                 modifier =
                     Modifier
@@ -267,19 +304,28 @@ private fun GameEntryCard(
 /**
  * The mark of a game, drawn above its name.
  *
- * The drawing is the game's own file in `assets/`: `pipes.svg` and `sudoku.svg`. A mark is not
- * the same thing as a board cell, so it is read here rather than from [PipeArt], whose files
- * are the pieces a board is made of; and it is read rather than copied into code, so an edited
- * drawing changes the card without a second record of its geometry.
+ * The drawing is the game's own file in `assets/`: `pipes.svg`, `sudoku.svg` and
+ * `minesweeper.svg`. A mark is not the same thing as a board cell, so it is read here rather
+ * than from [PipeArt], whose files are the pieces a board is made of; and it is read rather
+ * than copied into code, so an edited drawing changes the card without a second record of its
+ * geometry.
  *
- * The paths are drawn in the theme's ink and the gap the files leave is the card's own surface,
- * which is what makes one drawing legible in both schemes.
+ * Each band is drawn in the tone its file gives it, resolved against the theme: the ink is the
+ * theme's foreground, the surface is the card's own colour, the alert is the red a board uses
+ * for a loop, and the neutral is the secondary surface. That is what makes one drawing legible
+ * in both schemes and what lets the minesweeper mark keep its red and its grey.
  */
 @Composable
 private fun GameIcon(kind: GameKind) {
     val context = LocalContext.current
-    val ink = MaterialTheme.colorScheme.onSurface
-    val surface = MaterialTheme.colorScheme.surface
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val tones =
+        mapOf(
+            GameArt.Tone.Ink to MaterialTheme.colorScheme.onSurface,
+            GameArt.Tone.Surface to MaterialTheme.colorScheme.surface,
+            GameArt.Tone.Alert to if (dark) AlertDark else AlertLight,
+            GameArt.Tone.Neutral to MaterialTheme.colorScheme.surfaceVariant,
+        )
     val bands = remember(context, kind) { GameArt.of(context, kind) }
     Canvas(modifier = Modifier.size(GameIconSize)) {
         val scale = size.minDimension / GameArt.SIZE
@@ -287,13 +333,13 @@ private fun GameIcon(kind: GameKind) {
             scale(scale, scale, pivot = Offset.Zero)
         }) {
             for (band in bands) {
-                band.fill?.let { dark ->
-                    drawPath(band.path, color = if (dark) ink else surface, style = Fill)
+                band.fill?.let { tone ->
+                    drawPath(band.path, color = tones.getValue(tone), style = Fill)
                 }
-                band.stroke?.let { dark ->
+                band.stroke?.let { tone ->
                     drawPath(
                         band.path,
-                        color = if (dark) ink else surface,
+                        color = tones.getValue(tone),
                         style = Stroke(width = band.strokeWidth, join = StrokeJoin.Miter),
                     )
                 }
@@ -335,6 +381,11 @@ fun restoreGame(save: SavedGame): GameInProgress? =
         GameKind.Sudoku ->
             Rules.sudokuFromSnapshot(save.snapshot)?.let { board ->
                 GameInProgress.Sudoku(board, save.playerName, save.seconds)
+            }
+
+        GameKind.Minesweeper ->
+            Rules.minesweeperFromSnapshot(save.snapshot)?.let { board ->
+                GameInProgress.Minesweeper(board, save.playerName, save.seconds)
             }
     }
 

@@ -72,11 +72,16 @@ fun GameScreen(
     // flag is what tells it that this exit is a finish.
     var finished by remember { mutableStateOf(false) }
 
+    // A minesweeper board does not exist until its first cell is opened, so its clock waits
+    // for that opening; the other two games time the whole visit. The flag is read from the
+    // board rather than from a setting, because what says a board has started is the board.
+    var started by remember { mutableStateOf(!game.waitsForFirstMove) }
+
     // The clock is driven by the recomposition of the header rather than by a coroutine that
     // outlives the screen: a game that is not on screen is not being timed, which is what the
     // saved seconds mean.
-    androidx.compose.runtime.LaunchedEffect(game) {
-        while (true) {
+    androidx.compose.runtime.LaunchedEffect(game, started) {
+        while (started) {
             kotlinx.coroutines.delay(1000)
             elapsed += 1
         }
@@ -93,14 +98,16 @@ fun GameScreen(
 
                 is GameInProgress.Sudoku ->
                     SavedGame(GameKind.Sudoku, game.board.toSnapshot(), game.playerName, elapsed, System.currentTimeMillis())
+
+                is GameInProgress.Minesweeper ->
+                    SavedGame(GameKind.Minesweeper, game.board.toSnapshot(), game.playerName, elapsed, System.currentTimeMillis())
             }
         // A save the player made by leaving must outlive the screen, for the same reason the
         // record does.
         container.scope.launch { container.records.putSave(save) }
     }
 
-
-    fun finish() {
+    fun finish(failed: Boolean = false) {
         if (finished) {
             return
         }
@@ -112,6 +119,8 @@ fun GameScreen(
                 seconds = elapsed,
                 finishedAt = System.currentTimeMillis(),
                 seed = game.seed,
+                failed = failed,
+                typedSeed = game.typedSeed,
             )
         // The record is written in the container's scope, not this screen's: leaving the
         // screen cancels a scope the screen owns, and the write would be cancelled with it,
@@ -136,6 +145,9 @@ fun GameScreen(
                 when (game) {
                     is GameInProgress.Pipes -> game.board.undo()
                     is GameInProgress.Sudoku -> game.board.undo()
+                    // Minesweeper has no undo: a flag is cheap to take back and an opening is
+                    // a decision, so the header draws no undo button for it at all.
+                    is GameInProgress.Minesweeper -> Unit
                 }
             },
             onBack = {
@@ -156,6 +168,14 @@ fun GameScreen(
                     board = game.board,
                     settings = settings,
                     onSolved = ::finish,
+                )
+
+            is GameInProgress.Minesweeper ->
+                MinesweeperPlay(
+                    board = game.board,
+                    onStarted = { started = true },
+                    onWon = { finish() },
+                    onLost = { finish(failed = true) },
                 )
         }
     }
@@ -206,24 +226,16 @@ private fun GameHeader(
             )
         }
         Text(formatDuration(elapsed), style = MaterialTheme.typography.titleMedium, fontFamily = DurationFont)
-        TextButton(onClick = onUndo) { Text(stringResource(R.string.play_undo)) }
+        when (game) {
+            // Minesweeper has no undo, so the header offers none: a button that did nothing
+            // would be a control the player would press and then wonder about. Its counter of
+            // the mines left is drawn by the board itself, where the flags are.
+            is GameInProgress.Minesweeper -> Unit
+            else -> TextButton(onClick = onUndo) { Text(stringResource(R.string.play_undo)) }
+        }
     }
 }
 
 /** Returns the label of the parameters a game is played with. */
 @Composable
-private fun keyLabelOf(game: GameInProgress): String =
-    when (val key = game.key) {
-        is com.qiushui1012.app.minigames.data.RecordKey.Pipes ->
-            stringResource(
-                R.string.home_pipes_summary,
-                key.size,
-                stringResource(if (key.wrapped) R.string.pipes_layout_wrapped else R.string.pipes_layout_flat),
-            )
-
-        is com.qiushui1012.app.minigames.data.RecordKey.Sudoku ->
-            stringResource(
-                R.string.home_sudoku_summary,
-                difficultyLabel(difficultyFromStorageName(key.difficulty)),
-            )
-    }
+private fun keyLabelOf(game: GameInProgress): String = keyLabel(game.key)

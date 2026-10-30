@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The bomb, drawn from Google Fonts Icons' "bomb" (24 by 24). The board paints it in the
+  warning red, so the file carries no colour of its own.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M5.5,5.5c-1.24,0-2.25,1.01-2.25,2.25S4.26,10,5.5,10s2.25-1.01,2.25-2.25S6.74,5.5,5.5,5.5zM18,2.5l-2.47,2.47l-1.06-1.06L12.6,5.77l1.06,1.06L2.5,18l1.5,1.5l1.5-1.5l-1.5-1.5l11.16-11.16l1.06,1.06l1.86-1.86l-1.06-1.06L18,2.5z" />
+</vector>

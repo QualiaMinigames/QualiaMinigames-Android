@@ -16,6 +16,7 @@ package com.qiushui1012.app.minigames.ui
 
 import androidx.test.core.app.ApplicationProvider
 import com.qiushui1012.app.minigames.data.GameKind
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -62,13 +63,40 @@ class GameArtTest {
         // The files draw a mark in black on white, and the card paints those two tones with the
         // theme's ink and surface: a mark that lost one of them is a silhouette or a blank.
         val pipes = GameArt.of(context, GameKind.Pipes)
-        assertTrue("the pipes mark has no dark part", pipes.any { it.fill == true || it.stroke == true })
-        assertTrue("the pipes mark has no light part", pipes.any { it.fill == false || it.stroke == false })
+        assertTrue("the pipes mark has no dark part", pipes.any { it.fill == GameArt.Tone.Ink || it.stroke == GameArt.Tone.Ink })
+        assertTrue(
+            "the pipes mark has no light part",
+            pipes.any { it.fill == GameArt.Tone.Surface || it.stroke == GameArt.Tone.Surface },
+        )
 
         // The sudoku mark's cells are white inside a black outline, so its outline is the dark
         // tone and its fill is not.
         val sudoku = GameArt.of(context, GameKind.Sudoku)
-        assertTrue("the sudoku mark has no outlined cell", sudoku.any { it.stroke == true && it.strokeWidth > 0f })
-        assertTrue("the sudoku mark has no dark digit", sudoku.any { it.fill == true })
+        assertTrue(
+            "the sudoku mark has no outlined cell",
+            sudoku.any { it.stroke == GameArt.Tone.Ink && it.strokeWidth > 0f },
+        )
+        assertTrue("the sudoku mark has no dark digit", sudoku.any { it.fill == GameArt.Tone.Ink })
+    }
+
+    @Test
+    fun the_minesweeper_mark_uses_all_four_tones() {
+        // The mark is the only file that carries a red and a grey of its own, and both are what
+        // the board's covered cells and mines are drawn with: a file whose red resolved to the
+        // ink would make a card that said nothing about what the game looks like.
+        val tones = GameArt.of(context, GameKind.Minesweeper).flatMap { listOfNotNull(it.fill, it.stroke) }.toSet()
+        for (tone in GameArt.Tone.entries) {
+            assertTrue("the minesweeper mark never paints ${tone.name}", tone in tones)
+        }
+    }
+
+    @Test
+    fun a_colour_is_classified_by_what_it_is() {
+        // The four tones are decided from the colour alone, which is what keeps a mark edited
+        // in a drawing program classified by the same rule as the marks that came before it.
+        assertEquals(GameArt.Tone.Ink, GameArt.toneOf("#000000"))
+        assertEquals(GameArt.Tone.Surface, GameArt.toneOf("#ffffff"))
+        assertEquals(GameArt.Tone.Alert, GameArt.toneOf("#de3a54"))
+        assertEquals(GameArt.Tone.Neutral, GameArt.toneOf("#b3b3b3"))
     }
 }
