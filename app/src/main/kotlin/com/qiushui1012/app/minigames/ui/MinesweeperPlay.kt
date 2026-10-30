@@ -17,7 +17,6 @@ package com.qiushui1012.app.minigames.ui
 import android.graphics.Paint
 import android.graphics.Picture
 import android.graphics.Typeface
-import android.graphics.drawable.Drawable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,13 +36,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import com.qiushui1012.app.minigames.AlertDark
 import com.qiushui1012.app.minigames.AlertLight
@@ -135,11 +137,14 @@ fun MinesweeperPlay(
         remember(context) {
             ResourcesCompat.getFont(context, R.font.cascadia_code) ?: Typeface.MONOSPACE
         }
-    // The two marks are vector drawables, which a picture records as ordinary drawing
-    // commands: a picture is a list of what was drawn, not a bitmap, so the marks stay sharp.
-    val flagMark = remember(context) { ContextCompat.getDrawable(context, R.drawable.ic_flag) }
-    val mineMark = remember(context) { ContextCompat.getDrawable(context, R.drawable.ic_bomb) }
-
+    // The two marks are vector painters rather than drawables painted into the picture: a
+    // picture records what a drawable looks like at the moment it is recorded, and a
+    // drawable's tint is applied when it draws rather than when the command is recorded, so a
+    // mark whose tint was set after the recording came out in the wrong colour or not at all.
+    // The painters are drawn through the canvas transform in the composition instead, which
+    // also keeps them sharp at any zoom.
+    val flagMark = painterResource(R.drawable.ic_flag)
+    val mineMark = painterResource(R.drawable.ic_bomb)
     var states by remember(board) { mutableStateOf(board.cellsState()) }
     var phase by remember(board) { mutableStateOf(board.phase) }
     var fellBack by remember(board) { mutableStateOf(board.fellBack) }
@@ -240,7 +245,7 @@ fun MinesweeperPlay(
         }
         Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(Space.m)) {
             val picture =
-                remember(width, height, states, phase, boardBackground, numberColor, alert, divider, numberTypeface) {
+                remember(width, height, states, boardBackground, numberColor, divider, numberTypeface) {
                     recordBoard(
                         width = width,
                         height = height,
@@ -248,11 +253,8 @@ fun MinesweeperPlay(
                         covered = CoveredCell,
                         boardBackground = boardBackground,
                         numberColor = numberColor,
-                        alert = alert,
                         divider = divider,
                         typeface = numberTypeface,
-                        flag = flagMark,
-                        mine = mineMark,
                     )
                 }
             ZoomableBoard(
@@ -286,6 +288,20 @@ fun MinesweeperPlay(
                     drawIntoCanvas { canvas ->
                         canvas.nativeCanvas.drawPicture(picture)
                     }
+                    // The marks go over the recorded board rather than into it: a flag and a
+                    // mine are vector paintings, and a picture is a recording of draw commands
+                    // that a tint set afterwards cannot reach.
+                    for (index in states.indices) {
+                        when (states[index]) {
+                            MinesweeperCell.FLAGGED ->
+                                drawMark(flagMark, index, width, numberColor, 1f)
+
+                            MinesweeperCell.MINE ->
+                                drawMark(mineMark, index, width, alert, 1f)
+
+                            else -> Unit
+                        }
+                    }
                     val held = pressed
                     if (held != null && held in states.indices) {
                         drawRect(
@@ -295,7 +311,7 @@ fun MinesweeperPlay(
                         )
                         val state = states[held]
                         if (longPressed && state == MinesweeperCell.COVERED && flagAlpha > 0f) {
-                            drawDraggedFlag(flagMark, held, width, numberColor, flagAlpha)
+                            drawMark(flagMark, held, width, numberColor, flagAlpha)
                         }
                     }
                 },
@@ -306,45 +322,45 @@ fun MinesweeperPlay(
 }
 
 /**
- * Draws the flag a drag is carrying, at the opacity the drag has reached.
+ * Draws one mark in the middle of a cell, in the painter's own vector form.
  *
- * The mark is drawn through a scale of a thousand units so that its bounds can be integers,
- * which is what a drawable takes: in board units one cell is one unit wide, and a bound that
- * rounded to it would be a mark that filled the cell whatever size it was asked for.
+ * The painter is drawn inside a transform that moves it to its cell and scales it to a
+ * fraction of the cell, so one painter serves every cell and stays sharp at any zoom: the
+ * mark is a list of vector commands rather than a bitmap of one. [colour] is applied as a
+ * tint, which is what lets one file stand for both the ink a flag is drawn in and the warning
+ * red a mine is.
  */
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDraggedFlag(
-    flag: Drawable?,
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawMark(
+    painter: Painter,
     index: Int,
     width: Int,
     colour: Color,
     alpha: Float,
 ) {
-    if (flag == null || alpha <= 0f) {
+    if (alpha <= 0f) {
         return
     }
     val inset = (1f - MARK_SIZE) / 2f
-    val column = (index % width).toFloat() + inset
-    val row = (index / width).toFloat() + inset
-    flag.setTint(colour.toArgb())
-    flag.alpha = (alpha * 255).toInt()
-    flag.setBounds(0, 0, 1000, 1000)
-    drawIntoCanvas { canvas ->
-        canvas.save()
-        canvas.translate(column, row)
-        // A drawable's own space is a thousand units wide, and the mark occupies a fraction
-        // of a cell, so the scale is that fraction over the thousand.
-        canvas.scale(MARK_SIZE / 1000f, MARK_SIZE / 1000f)
-        flag.draw(canvas.nativeCanvas)
-        canvas.restore()
+    withTransform({
+        translate((index % width).toFloat() + inset, (index / width).toFloat() + inset)
+        scale(MARK_SIZE, MARK_SIZE, pivot = Offset.Zero)
+    }) {
+        with(painter) {
+            draw(Size(1f, 1f), alpha = alpha, colorFilter = ColorFilter.tint(colour))
+        }
     }
 }
 
 /**
- * Records a board into one picture, in board units.
+ * Records a board's cells, grid and numbers into one picture, in board units.
  *
  * The cells are painted in a single pass over two paint colours rather than one paint per cell,
  * and the numbers are set in the duration face: a board of numbers is read by comparing them,
  * and a proportional face makes `1` narrower than `8`.
+ *
+ * The flags and the mines are not part of the picture: they are vector painters, and a
+ * picture records the drawing commands of the moment it is made, which a tint applied later
+ * cannot reach. The composition draws them over the recorded board instead.
  */
 @Suppress("LongParameterList")
 private fun recordBoard(
@@ -354,11 +370,8 @@ private fun recordBoard(
     covered: Color,
     boardBackground: Color,
     numberColor: Color,
-    alert: Color,
     divider: Color,
     typeface: Typeface,
-    flag: Drawable?,
-    mine: Drawable?,
 ): Picture {
     val picture = Picture()
     val canvas = picture.beginRecording(width, height)
@@ -406,34 +419,6 @@ private fun recordBoard(
         }
     }
 
-    if (flag != null) {
-        flag.setTint(numberColor.toArgb())
-        for (index in states.indices) {
-            if (states[index] == MinesweeperCell.FLAGGED) {
-                drawMark(canvas, flag, index, width)
-            }
-        }
-    }
-    if (mine != null) {
-        mine.setTint(alert.toArgb())
-        for (index in states.indices) {
-            if (states[index] == MinesweeperCell.MINE) {
-                drawMark(canvas, mine, index, width)
-            }
-        }
-    }
-
     picture.endRecording()
     return picture
-}
-
-/** Draws one vector mark into the middle of a cell. */
-private fun drawMark(canvas: android.graphics.Canvas, mark: Drawable, index: Int, width: Int) {
-    val inset = (1f - MARK_SIZE) / 2f
-    mark.setBounds(0, 0, 1000, 1000)
-    canvas.save()
-    canvas.translate(index % width + inset, index / width + inset)
-    canvas.scale(MARK_SIZE / 1000f, MARK_SIZE / 1000f)
-    mark.draw(canvas)
-    canvas.restore()
 }

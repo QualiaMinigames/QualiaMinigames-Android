@@ -23,6 +23,7 @@ import com.qiushui1012.app.minigames.data.RecordsFile
 import com.qiushui1012.app.minigames.data.RecordsStore
 import com.qiushui1012.app.minigames.data.SavedGame
 import com.qiushui1012.app.minigames.export.RecordImage
+import com.qiushui1012.app.minigames.rules.MinesweeperCell
 import com.qiushui1012.app.minigames.rules.MinesweeperEvent
 import com.qiushui1012.app.minigames.rules.MinesweeperMode
 import com.qiushui1012.app.minigames.rules.MinesweeperPhase
@@ -211,6 +212,27 @@ class GameFlowTest {
             )
         assertTrue(several.width > 0)
         assertTrue(several.height > 0)
+    }
+
+    @Test
+    fun a_lost_board_reports_every_mine_as_a_mine() {
+        // A board the player lost has to hand its mines back as the value the board draws a
+        // mine from. The rules report an open mine as 11, and a screen that received the
+        // covered value instead would show a lost board with nothing on it.
+        val board = requireNotNull(Rules.minesweeperFromSeed(9, 9, 10, MinesweeperMode.Normal, 5))
+        val mine =
+            (0 until board.cellCount).first { index ->
+                val probe = requireNotNull(Rules.minesweeperFromSeed(9, 9, 10, MinesweeperMode.Normal, 5))
+                probe.reveal(index) == MinesweeperEvent.HitMine
+            }
+        assertEquals(MinesweeperEvent.HitMine, board.reveal(mine))
+        val state = board.cellsState()
+        assertEquals(MinesweeperCell.MINE, state[mine])
+        assertEquals(
+            "the board shows ten mines and not one",
+            10,
+            state.count { it == MinesweeperCell.MINE },
+        )
     }
 
     @Test
