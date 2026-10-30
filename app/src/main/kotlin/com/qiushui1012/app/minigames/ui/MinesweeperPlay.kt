@@ -46,10 +46,13 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.core.content.res.ResourcesCompat
 import com.qiushui1012.app.minigames.AlertDark
 import com.qiushui1012.app.minigames.AlertLight
 import com.qiushui1012.app.minigames.DurationFont
+import com.qiushui1012.app.minigames.SuccessDark
+import com.qiushui1012.app.minigames.SuccessLight
 import com.qiushui1012.app.minigames.R
 import com.qiushui1012.app.minigames.Space
 import com.qiushui1012.app.minigames.Water
@@ -157,6 +160,7 @@ fun MinesweeperPlay(
     val boardBackground = MaterialTheme.colorScheme.background
     val numberColor = MaterialTheme.colorScheme.onBackground
     val alert = if (dark) AlertDark else AlertLight
+    val success = if (dark) SuccessDark else SuccessLight
     val divider = MaterialTheme.colorScheme.outline
 
     LaunchedEffect(phase) {
@@ -233,10 +237,11 @@ fun MinesweeperPlay(
                 style = MaterialTheme.typography.titleLarge,
                 color =
                     if (board.phase == MinesweeperPhase.Lost) {
-                        MaterialTheme.colorScheme.error
+                        alert
                     } else {
-                        MaterialTheme.colorScheme.onBackground
+                        success
                     },
+                textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = Space.l, vertical = Space.s),
             )
         }
@@ -349,8 +354,9 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDragFlag(
     colour: Color,
     alpha: Float,
 ) {
-    val inset = (1f - MARK_SIZE) / 2f
     val scale = MARK_SIZE / maxOf(FLAG_BOUNDS.width(), FLAG_BOUNDS.height())
+    val offsetX = (1f - FLAG_BOUNDS.width() * scale) / 2f
+    val offsetY = (1f - FLAG_BOUNDS.height() * scale) / 2f
     drawIntoCanvas { canvas ->
         val paint =
             android.graphics.Paint().apply {
@@ -359,7 +365,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDragFlag(
                 this.alpha = (alpha * 255).toInt()
             }
         canvas.nativeCanvas.save()
-        canvas.nativeCanvas.translate(index % width + inset, index / width + inset)
+        canvas.nativeCanvas.translate(index % width + offsetX, index / width + offsetY)
         canvas.nativeCanvas.scale(scale, scale)
         canvas.nativeCanvas.translate(-FLAG_BOUNDS.left, -FLAG_BOUNDS.top)
         canvas.nativeCanvas.drawPath(FLAG_GLYPH, paint)
@@ -383,10 +389,17 @@ private fun drawGlyph(
     index: Int,
     width: Int,
 ) {
-    val inset = (1f - MARK_SIZE) / 2f
-    val scale = MARK_SIZE / maxOf(bounds.width(), bounds.height())
+    // The glyph is scaled by one factor and then centred on its own bounds rather than pinned
+    // by its top-left corner: the flag and the mine are different shapes, and a mark placed by
+    // its corner sits off the middle of its cell by half the difference.
+    val target = MARK_SIZE
+    val scale = target / maxOf(bounds.width(), bounds.height())
+    val drawnWidth = bounds.width() * scale
+    val drawnHeight = bounds.height() * scale
+    val offsetX = (1f - drawnWidth) / 2f
+    val offsetY = (1f - drawnHeight) / 2f
     canvas.save()
-    canvas.translate(index % width + inset, index / width + inset)
+    canvas.translate(index % width + offsetX, index / width + offsetY)
     canvas.scale(scale, scale)
     canvas.translate(-bounds.left, -bounds.top)
     canvas.drawPath(glyph, paint)
@@ -422,7 +435,13 @@ private val MINE_GLYPH: android.graphics.Path = android.graphics.Path().apply {
             "37.383 38.741 C37.383 38.397 37.336 38.058 37.242 37.725 C37.147 37.391 37.006 37.075 " +
             "36.817 36.775 L36.383 36.091 L37.083 34.891 L35.35 33.891 L34.65 35.091 L33.917 35.091 " +
             "C32.872 35.091 31.964 35.425 31.192 36.091 C30.419 36.758 30.033 37.63 30.033 38.708 " +
-            "C30.033 39.73 30.392 40.602 31.108 41.325 C31.825 42.047 32.694 42.408 33.717 42.408 Z"
+            "C30.033 39.73 30.392 40.602 31.108 41.325 C31.825 42.047 32.694 42.408 33.717 42.408 Z " +
+            // The three sparks: one short arm at each of the mine's two upper quarters and one
+            // at its upper right. They are separate subpaths of the same glyph, and a board
+            // that left them out drew a plain circle.
+            "M41.283 34.408 L41.283 33.075 L43.283 33.075 L43.283 34.408 Z " +
+            "M37.617 30.741 L37.617 28.741 L38.95 28.741 L38.95 30.741 Z " +
+            "M40.867 32.091 L39.933 31.158 L41.35 29.741 L42.283 30.675 Z"
     fillFromData(this, data)
     fillType = android.graphics.Path.FillType.EVEN_ODD
 }

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -258,19 +259,24 @@ private fun GameEntryCard(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
-            // The buttons wrap rather than squeeze: in a narrow column two of them side by side
-            // would each be narrower than their own label, and a button with a wrapped label is
-            // taller than the row holding it.
+            // The buttons share one row when their two labels fit it: a card is a mark, a name
+            // and what can be done with it, and a second row of buttons makes the card taller
+            // than the mark it introduces. They wrap only when the column is too narrow, which
+            // is what the horizontal padding below buys back: Material's default is wide enough
+            // that two two-character labels took two rows on a phone held upright.
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(Space.s),
-                horizontalArrangement = Arrangement.spacedBy(Space.s),
+                horizontalArrangement = Arrangement.spacedBy(Space.xs),
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
                 // Only a game that can be resumed offers the button: a "continue" over a save
                 // that will not open is a control that does nothing.
                 if (resumed != null) {
-                    Button(onClick = { onContinue(resumed) }) {
+                    Button(
+                        onClick = { onContinue(resumed) },
+                        contentPadding = PaddingValues(horizontal = Space.m, vertical = Space.s),
+                    ) {
                         Text(stringResource(R.string.pipes_continue))
                     }
                 }
@@ -282,6 +288,7 @@ private fun GameEntryCard(
                             onNewGame(entry.kind)
                         }
                     },
+                    contentPadding = PaddingValues(horizontal = Space.s, vertical = Space.s),
                 ) {
                     Text(stringResource(R.string.pipes_new_game))
                 }

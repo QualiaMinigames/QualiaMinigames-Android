@@ -155,6 +155,11 @@ fun ZoomableBoard(
                 // The size of the box is what drawing and hit testing both measure against.
                 .onSizeChanged { view = it }
                 .pointerInput(boardWidth, boardHeight, rows, columns, pressChanged != null) {
+                    // A press is held long enough to be deliberate and no longer. The platform's
+                    // own timeout is a third longer than a board wants: on a grid a player
+                    // presses and moves on within a second, and waiting out the system figure
+                    // makes a flag feel like it is not coming.
+                    val longPressMillis = viewConfiguration.longPressTimeoutMillis * 2 / 3
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val startedAt = down.position
@@ -179,7 +184,7 @@ fun ZoomableBoard(
                         // the press taking hold and a value is the gesture being a tap, a drag
                         // or a pinch after all.
                         val interrupted =
-                            withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                            withTimeoutOrNull(longPressMillis) {
                                 while (true) {
                                     val event = awaitPointerEvent(PointerEventPass.Main)
                                     val pressed = event.changes.filter { it.pressed }

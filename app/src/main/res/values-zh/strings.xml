@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
   The Chinese translation. The key set must match `values/strings.xml` exactly, which a test
   checks: a key added to one file and forgotten in the other would fall back silently, and
@@ -13,11 +13,11 @@
 
     <string name="home_title">游戏</string>
     <string name="home_pipes_name">接水管</string>
-    <string name="home_pipes_summary">%1$d × %1$d，%2$s</string>
+    <string name="home_pipes_summary">%1$d×%1$d，%2$s</string>
     <string name="home_sudoku_name">数独</string>
     <string name="home_sudoku_summary">%1$s</string>
     <string name="home_minesweeper_name">扫雷</string>
-    <string name="home_minesweeper_summary">%1$d × %2$d，%3$d 颗雷，%4$s</string>
+    <string name="home_minesweeper_summary">%1$d×%2$d，%3$d 颗雷，%4$s</string>
 
     <string name="pipes_layout_flat">平边</string>
     <string name="pipes_layout_wrapped">跨边</string>
@@ -40,9 +40,9 @@
     <string name="sudoku_won">已完成</string>
 
     <!-- 扫雷 -->
-    <string name="minesweeper_preset_beginner">经典初级 9 × 9，10 颗雷</string>
-    <string name="minesweeper_preset_intermediate">经典中级 16 × 16，40 颗雷</string>
-    <string name="minesweeper_preset_expert">经典高级 30 × 16，99 颗雷</string>
+    <string name="minesweeper_preset_beginner">经典初级 9×9，10 颗雷</string>
+    <string name="minesweeper_preset_intermediate">经典中级 16×16，40 颗雷</string>
+    <string name="minesweeper_preset_expert">经典高级 30×16，99 颗雷</string>
     <string name="minesweeper_width_range">宽度（4~128）</string>
     <string name="minesweeper_height_range">高度（4~128）</string>
     <string name="minesweeper_slider_ticks">滑块范围 4~35</string>
@@ -66,8 +66,8 @@
     <string name="minesweeper_fell_back">无猜生成失败，本局已回退到普通模式</string>
     <string name="minesweeper_generating">正在生成盘面</string>
     <string name="minesweeper_mines_counter">剩余 %1$d / %2$d</string>
-    <string name="minesweeper_lost">踩雷</string>
-    <string name="minesweeper_won">已完成</string>
+    <string name="minesweeper_lost">恭喜你，踩雷了！</string>
+    <string name="minesweeper_won">恭喜你，通关了！</string>
 
     <string name="play_undo">撤销</string>
     <string name="play_back">返回</string>

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!--
   Default locale: English (United States).
 
@@ -19,11 +19,11 @@
     <!-- Home -->
     <string name="home_title">Games</string>
     <string name="home_pipes_name">Pipes</string>
-    <string name="home_pipes_summary">%1$d × %1$d, %2$s</string>
+    <string name="home_pipes_summary">%1$d×%1$d, %2$s</string>
     <string name="home_sudoku_name">Sudoku</string>
     <string name="home_sudoku_summary">%1$s</string>
     <string name="home_minesweeper_name">Minesweeper</string>
-    <string name="home_minesweeper_summary">%1$d × %2$d, %3$d mines, %4$s</string>
+    <string name="home_minesweeper_summary">%1$d×%2$d, %3$d mines, %4$s</string>
 
     <!-- Pipes -->
     <string name="pipes_layout_flat">flat</string>
@@ -48,9 +48,9 @@
     <string name="sudoku_won">Solved</string>
 
     <!-- Minesweeper -->
-    <string name="minesweeper_preset_beginner">Beginner 9 × 9, 10 mines</string>
-    <string name="minesweeper_preset_intermediate">Intermediate 16 × 16, 40 mines</string>
-    <string name="minesweeper_preset_expert">Expert 30 × 16, 99 mines</string>
+    <string name="minesweeper_preset_beginner">Beginner 9×9, 10 mines</string>
+    <string name="minesweeper_preset_intermediate">Intermediate 16×16, 40 mines</string>
+    <string name="minesweeper_preset_expert">Expert 30×16, 99 mines</string>
     <string name="minesweeper_width_range">Width (4–128)</string>
     <string name="minesweeper_height_range">Height (4–128)</string>
     <string name="minesweeper_slider_ticks">Slider range 4–35</string>
@@ -74,8 +74,8 @@
     <string name="minesweeper_fell_back">No-guess generation failed, so this game fell back to normal mode</string>
     <string name="minesweeper_generating">Generating the board</string>
     <string name="minesweeper_mines_counter">%1$d of %2$d left</string>
-    <string name="minesweeper_lost">Hit a mine</string>
-    <string name="minesweeper_won">Cleared</string>
+    <string name="minesweeper_lost">Congratulations, you hit a mine!</string>
+    <string name="minesweeper_won">Congratulations, you cleared the board!</string>
 
     <!-- Play -->
     <string name="play_undo">Undo</string>

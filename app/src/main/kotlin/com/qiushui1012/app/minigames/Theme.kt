@@ -112,6 +112,18 @@ val AlertDark = Color(0xFFFFB4AB)
 val Water = Color(0xFFA8CAD4)
 
 /**
+ * A deep green for a board the player cleared: the counterpart of [AlertLight].
+ *
+ * It is a third signal rather than a second brand colour, and it exists for the same reason
+ * the red does: "you won" and "you lost" are told apart in one glance, and a grey line above a
+ * board reads as neither.
+ */
+val SuccessLight = Color(0xFF1B5E20)
+
+/** The same green, lightened until it reads on a dark surface. */
+val SuccessDark = Color(0xFFA5D6A7)
+
+/**
  * The blue a sudoku digit the player entered is drawn in.
  *
  * One blue for both schemes, for the same reason [Water] needs only one: the tone reads on the
