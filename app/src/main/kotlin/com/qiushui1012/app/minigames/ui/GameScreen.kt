@@ -79,9 +79,11 @@ fun GameScreen(
 
     // The clock is driven by the recomposition of the header rather than by a coroutine that
     // outlives the screen: a game that is not on screen is not being timed, which is what the
-    // saved seconds mean.
-    androidx.compose.runtime.LaunchedEffect(game, started) {
-        while (started) {
+    // saved seconds mean. A finished game stops it too, which matters for the board that stays
+    // on screen after a mine: a clock still running over a game that is already recorded would
+    // put one time in the header and another in the record.
+    androidx.compose.runtime.LaunchedEffect(game, started, finished) {
+        while (started && !finished) {
             kotlinx.coroutines.delay(1000)
             elapsed += 1
         }
