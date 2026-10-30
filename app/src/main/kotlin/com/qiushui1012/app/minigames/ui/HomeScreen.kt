@@ -131,24 +131,13 @@ fun HomeScreen(
             GameEntry(
                 kind = GameKind.Pipes,
                 name = stringResource(R.string.home_pipes_name),
-                summary =
-                    stringResource(
-                        R.string.home_pipes_summary,
-                        settings.lastPipesSize,
-                        stringResource(
-                            if (settings.lastPipesWrapped) R.string.pipes_layout_wrapped else R.string.pipes_layout_flat,
-                        ),
-                    ),
+                summary = keyLabel(RecordKey.Pipes(settings.lastPipesSize, settings.lastPipesWrapped)),
                 save = pipesSave,
             ),
             GameEntry(
                 kind = GameKind.Sudoku,
                 name = stringResource(R.string.home_sudoku_name),
-                summary =
-                    stringResource(
-                        R.string.home_sudoku_summary,
-                        difficultyLabel(difficultyFromStorageName(settings.lastSudokuDifficulty)),
-                    ),
+                summary = keyLabel(RecordKey.Sudoku(settings.lastSudokuDifficulty)),
                 save = sudokuSave,
             ),
             GameEntry(
