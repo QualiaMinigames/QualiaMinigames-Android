@@ -107,7 +107,16 @@ fun GameScreen(
         container.scope.launch { container.records.putSave(save) }
     }
 
-    fun finish(failed: Boolean = false) {
+    /**
+     * Writes the record and clears the save.
+     *
+     * [navigate] says whether the screen then leaves for the records page. A cleared board
+     * does, because there is nothing left to look at; a board lost on a mine does not, because
+     * the player asked to see where the mines were and a screen that jumped away would take
+     * that answer back before it was read. The board itself refuses every later tap, and the
+     * flag below keeps the save from being written when the player does leave.
+     */
+    fun finish(failed: Boolean = false, navigate: Boolean = true) {
         if (finished) {
             return
         }
@@ -129,7 +138,9 @@ fun GameScreen(
             container.records.addRecord(record)
             container.records.clearSave(game.kind)
         }
-        onFinished()
+        if (navigate) {
+            onFinished()
+        }
     }
 
     Column(
@@ -175,7 +186,9 @@ fun GameScreen(
                     board = game.board,
                     onStarted = { started = true },
                     onWon = { finish() },
-                    onLost = { finish(failed = true) },
+                    // The board stays on screen with its mines shown: the player leaves by
+                    // pressing back, which is the one way out of a board that has ended.
+                    onLost = { finish(failed = true, navigate = false) },
                 )
         }
     }
