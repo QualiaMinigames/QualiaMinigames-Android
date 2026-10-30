@@ -77,6 +77,14 @@ fun GameScreen(
     // board rather than from a setting, because what says a board has started is the board.
     var started by remember { mutableStateOf(!game.waitsForFirstMove) }
 
+    // The mines a game's flags leave unaccounted for, which the header draws beside the clock
+    // for the one game that counts them. It is held here because the header sits above the
+    // board's composition and has to follow a flag the board has just placed; the board
+    // reports every change through the callback below.
+    val minesweeper = game as? GameInProgress.Minesweeper
+    var remainingMines by remember(game) { mutableStateOf(minesweeper?.board?.remainingMines ?: 0) }
+    var mineCount by remember(game) { mutableStateOf(minesweeper?.board?.mineCount ?: 0) }
+
     // The clock is driven by the recomposition of the header rather than by a coroutine that
     // outlives the screen: a game that is not on screen is not being timed, which is what the
     // saved seconds mean. A finished game stops it too, which matters for the board that stays
@@ -154,6 +162,8 @@ fun GameScreen(
         GameHeader(
             game = game,
             elapsed = elapsed,
+            mines = if (minesweeper != null) remainingMines else null,
+            mineTotal = mineCount,
             onUndo = {
                 when (game) {
                     is GameInProgress.Pipes -> game.board.undo()
@@ -187,6 +197,10 @@ fun GameScreen(
                 MinesweeperPlay(
                     board = game.board,
                     onStarted = { started = true },
+                    onCountersChanged = { left, total ->
+                        remainingMines = left
+                        mineCount = total
+                    },
                     onWon = { finish() },
                     // The board stays on screen with its mines shown: the player leaves by
                     // pressing back, which is the one way out of a board that has ended.
@@ -218,11 +232,19 @@ fun GameScreen(
     }
 }
 
-/** The bar above a board: the game's parameters, the player, the clock and undo. */
+/**
+ * The bar above a board: the game's parameters, the player, the clock, the mines left and undo.
+ *
+ * [mines] and [mineTotal] are the two numbers the header shows for minesweeper and are null
+ * for the games that do not count them, which is why the counter is a slot rather than a
+ * second header: the bar is one row and a game that has nothing to put in it leaves it empty.
+ */
 @Composable
 private fun GameHeader(
     game: GameInProgress,
     elapsed: Long,
+    mines: Int?,
+    mineTotal: Int,
     onUndo: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -240,11 +262,19 @@ private fun GameHeader(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        if (mines != null) {
+            // The counter sits to the left of the clock, which is the order a minesweeper
+            // player reads them in: how much is left, then how long it has taken.
+            Text(
+                stringResource(R.string.minesweeper_mines_counter, mines, mineTotal),
+                style = MaterialTheme.typography.labelLarge,
+                fontFamily = DurationFont,
+            )
+        }
         Text(formatDuration(elapsed), style = MaterialTheme.typography.titleMedium, fontFamily = DurationFont)
         when (game) {
             // Minesweeper has no undo, so the header offers none: a button that did nothing
-            // would be a control the player would press and then wonder about. Its counter of
-            // the mines left is drawn by the board itself, where the flags are.
+            // would be a control the player would press and then wonder about.
             is GameInProgress.Minesweeper -> Unit
             else -> TextButton(onClick = onUndo) { Text(stringResource(R.string.play_undo)) }
         }

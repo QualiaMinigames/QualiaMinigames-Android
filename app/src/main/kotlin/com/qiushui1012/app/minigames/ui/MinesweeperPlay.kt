@@ -126,6 +126,7 @@ private const val GENERATING_MILLIS = 200L
 fun MinesweeperPlay(
     board: MinesweeperBoard,
     onStarted: () -> Unit,
+    onCountersChanged: (left: Int, total: Int) -> Unit,
     onWon: () -> Unit,
     onLost: () -> Unit,
 ) {
@@ -141,7 +142,6 @@ fun MinesweeperPlay(
 
     var states by remember(board) { mutableStateOf(board.cellsState()) }
     var phase by remember(board) { mutableStateOf(board.phase) }
-    var remaining by remember(board) { mutableStateOf(board.remainingMines) }
     var fellBack by remember(board) { mutableStateOf(board.fellBack) }
     // A board that has not been laid down is being generated while a first click is held, and
     // a generation that outlasts a couple of frames says so rather than leaving the press
@@ -174,8 +174,9 @@ fun MinesweeperPlay(
     fun refresh() {
         states = board.cellsState()
         phase = board.phase
-        remaining = board.remainingMines
         fellBack = board.fellBack
+        // The header draws the counter, so the board reports it rather than drawing it twice.
+        onCountersChanged(board.remainingMines, board.mineCount)
     }
 
     /**
@@ -237,12 +238,6 @@ fun MinesweeperPlay(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = Space.l),
             )
         }
-        Text(
-            stringResource(R.string.minesweeper_mines_counter, remaining, board.mineCount),
-            style = MaterialTheme.typography.labelLarge,
-            fontFamily = DurationFont,
-            modifier = Modifier.padding(horizontal = Space.l, vertical = Space.s),
-        )
         Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(Space.m)) {
             val picture =
                 remember(width, height, states, phase, boardBackground, numberColor, alert, divider, numberTypeface) {
