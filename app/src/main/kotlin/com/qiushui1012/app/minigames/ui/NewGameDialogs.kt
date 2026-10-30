@@ -39,6 +39,7 @@ import com.qiushui1012.app.minigames.Space
 import com.qiushui1012.app.minigames.data.GameKind
 import com.qiushui1012.app.minigames.data.Settings
 import com.qiushui1012.app.minigames.difficultyFromStorageName
+import com.qiushui1012.app.minigames.resolveSeed
 import com.qiushui1012.app.minigames.rules.PipesLayout
 import com.qiushui1012.app.minigames.rules.Rules
 import com.qiushui1012.app.minigames.rules.SudokuDifficulty
@@ -76,10 +77,14 @@ fun PipesNewGameDialog(
     val scope = rememberCoroutineScope()
     val minimum = Rules.pipesMinSize()
     val maximum = Rules.pipesMaxSize()
+    // The seed a random game starts from is taken when the dialog opens, so that the moment
+    // the button is pressed cannot change the board the player is looking at.
+    val fallbackSeed = remember { System.currentTimeMillis() }
     var size by remember { mutableStateOf(settings.lastPipesSize.coerceIn(minimum, maximum)) }
     var sizeText by remember { mutableStateOf(size.toString()) }
     var wrapped by remember { mutableStateOf(settings.lastPipesWrapped) }
     var playerName by remember { mutableStateOf(settings.playerName) }
+    var seedText by remember { mutableStateOf("") }
 
     ModalForm(
         title = stringResource(R.string.dialog_new_game_title),
@@ -87,7 +92,9 @@ fun PipesNewGameDialog(
         confirm = {
             ModalConfirm(
                 label = stringResource(R.string.dialog_start),
-                onClick = { startNew(scope, container, size, wrapped, playerName, onStart) },
+                onClick = {
+                    startNew(scope, container, size, wrapped, playerName, seedText, fallbackSeed, onStart)
+                },
             )
         },
     ) {
@@ -130,6 +137,7 @@ fun PipesNewGameDialog(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            SeedField(value = seedText, onValueChange = { seedText = it })
         }
     }
 }
@@ -141,21 +149,32 @@ private fun startNew(
     size: Int,
     wrapped: Boolean,
     playerName: String,
+    seedText: String,
+    fallbackSeed: Long,
     onStart: (GameInProgress) -> Unit,
 ) {
-    val board = Rules.newPipes(size, if (wrapped) PipesLayout.Wrapped else PipesLayout.Flat, System.currentTimeMillis()) ?: return
+    val typed = seedText.trim().isNotEmpty()
+    val resolved = resolveSeed(seedText, fallbackSeed)
+    val board = Rules.newPipes(size, if (wrapped) PipesLayout.Wrapped else PipesLayout.Flat, resolved.seed) ?: return
     scope.launch {
         container.settings.setLastPipes(size, wrapped)
         container.records.clearSave(GameKind.Pipes)
     }
-    onStart(GameInProgress.Pipes(board, playerName.trim(), 0))
+    onStart(GameInProgress.Pipes(board, playerName.trim(), 0, typed))
 }
 
 /**
  * The dialog that starts a sudoku game.
  *
  * The difficulty is the only parameter, so it is a row of three and no field; the player name
- * works exactly as it does for pipes.
+ * and the seed work exactly as they do for pipes.
+ *
+ * # Why a seed can keep the dialog open
+ *
+ * A sudoku puzzle is dug out of a full grid and rated, and a seed that produces no puzzle of
+ * the chosen difficulty is a possible answer rather than a defect. The infallible generation
+ * entry point panics when it happens, and a panic across the language boundary ends the
+ * process, so this dialog calls the fallible one and says so in place.
  */
 @Composable
 fun SudokuNewGameDialog(
@@ -165,8 +184,11 @@ fun SudokuNewGameDialog(
     onStart: (GameInProgress) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val fallbackSeed = remember { System.currentTimeMillis() }
     var difficulty by remember { mutableStateOf(difficultyFromStorageName(settings.lastSudokuDifficulty)) }
     var playerName by remember { mutableStateOf(settings.playerName) }
+    var seedText by remember { mutableStateOf("") }
+    var failed by remember { mutableStateOf(false) }
 
     ModalForm(
         title = stringResource(R.string.dialog_new_game_title),
@@ -174,7 +196,22 @@ fun SudokuNewGameDialog(
         confirm = {
             ModalConfirm(
                 label = stringResource(R.string.dialog_start),
-                onClick = { startSudoku(scope, container, difficulty, playerName, onStart) },
+                onClick = {
+                    val typed = seedText.trim().isNotEmpty()
+                    val resolved = resolveSeed(seedText, fallbackSeed)
+                    val board = Rules.trySudoku(difficulty, resolved.seed)
+                    if (board == null) {
+                        // The form stays open with the seed in it, which is what lets the player
+                        // change one character rather than retype the whole thing.
+                        failed = true
+                    } else {
+                        scope.launch {
+                            container.settings.setLastSudokuDifficulty(difficulty.toStorageName())
+                            container.records.clearSave(GameKind.Sudoku)
+                        }
+                        onStart(GameInProgress.Sudoku(board, playerName.trim(), 0, typed))
+                    }
+                },
             )
         },
     ) {
@@ -182,7 +219,10 @@ fun SudokuNewGameDialog(
             Text(stringResource(R.string.sudoku_difficulty), style = MaterialTheme.typography.labelLarge)
             Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
                 for (option in SudokuDifficulty.entries) {
-                    ChoiceButton(difficultyLabel(option), option == difficulty) { difficulty = option }
+                    ChoiceButton(difficultyLabel(option), option == difficulty) {
+                        difficulty = option
+                        failed = false
+                    }
                 }
             }
             OutlinedTextField(
@@ -193,22 +233,20 @@ fun SudokuNewGameDialog(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            SeedField(
+                value = seedText,
+                onValueChange = {
+                    seedText = it
+                    failed = false
+                },
+            )
+            if (failed) {
+                Text(
+                    stringResource(R.string.sudoku_seed_failed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
         }
     }
-}
-
-/** Starts a new sudoku game and remembers the difficulty it was started with. */
-private fun startSudoku(
-    scope: kotlinx.coroutines.CoroutineScope,
-    container: AppContainer,
-    difficulty: SudokuDifficulty,
-    playerName: String,
-    onStart: (GameInProgress) -> Unit,
-) {
-    val board = Rules.newSudoku(difficulty, System.currentTimeMillis())
-    scope.launch {
-        container.settings.setLastSudokuDifficulty(difficulty.toStorageName())
-        container.records.clearSave(GameKind.Sudoku)
-    }
-    onStart(GameInProgress.Sudoku(board, playerName.trim(), 0))
 }

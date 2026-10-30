@@ -148,7 +148,8 @@ object RecordImage {
      * interface is in, so an exported card says "简单" or "Easy" for the same board rather
      * than the storage name. [unknown] is what an unnamed player is called, for the same
      * reason: a dash is not a word. [durationTypeface] is the monospaced face the time is
-     * written in.
+     * written in, and [failed] and [typed] are the two words the card adds to say how the game
+     * ended and how it was started.
      */
     fun single(
         record: Record,
@@ -157,6 +158,8 @@ object RecordImage {
         unknown: String,
         exportedAt: String,
         durationTypeface: Typeface,
+        failed: String? = null,
+        typed: String? = null,
     ): Bitmap {
         val cardTop = MARGIN
         val contentTop = cardTop + PADDING
@@ -183,20 +186,30 @@ object RecordImage {
         // The parameters stand beside the name rather than under it: the name is the title of
         // the card and the parameters qualify it, which is one line's worth of reading. They
         // sit on the title's own baseline so that the two do not float against each other.
-        canvas.textBeside(
-            params(record.key),
-            left + title.measureText(titleText) + TITLE_GAP,
-            titleTop,
-            title,
-            paint(color = muted, size = PARAMS_SIZE),
-        )
+        var paramsLeft = left + title.measureText(titleText) + TITLE_GAP
+        val paramsPaint = paint(color = muted, size = PARAMS_SIZE)
+        canvas.textBeside(params(record.key), paramsLeft, titleTop, title, paramsPaint)
+        // A hand-picked seed is said on the parameters' own line, right after them: it is a
+        // note about the puzzle rather than about the game's outcome, and the time below is
+        // where the outcome belongs.
+        if (record.typedSeed && typed != null) {
+            paramsLeft += paramsPaint.measureText(params(record.key)) + TITLE_GAP
+            canvas.textBeside(typed, paramsLeft, titleTop, title, paramsPaint)
+        }
 
-        canvas.text(
-            formatDuration(record.seconds),
-            left,
-            timeTop,
-            paint(color = ink, size = TIME_SIZE, bold = true, typeface = durationTypeface),
-        )
+        // A lost game's time is still a fact, so the word stands beside it rather than
+        // replacing it: the card says what happened and how long it took to happen.
+        val timePaint = paint(color = ink, size = TIME_SIZE, bold = true, typeface = durationTypeface)
+        if (record.failed == true && failed != null) {
+            val label = paint(color = ink, size = DETAIL_SIZE, bold = true)
+            var timeLeft = left
+            val labelBaselineGap = (TIME_LINE - DETAIL_LINE) / 2f
+            canvas.text(failed, timeLeft, timeTop + labelBaselineGap, label)
+            timeLeft += label.measureText(failed) + TITLE_GAP
+            canvas.text(formatDuration(record.seconds), timeLeft, timeTop, timePaint)
+        } else {
+            canvas.text(formatDuration(record.seconds), left, timeTop, timePaint)
+        }
         canvas.text(record.playerName.ifBlank { unknown }, left, playerTop, detail)
         canvas.text(formatStamp(record.finishedAt), left, finishedTop, detail)
 
@@ -223,21 +236,39 @@ object RecordImage {
         title: String,
         headers: List<String>,
         durationTypeface: Typeface,
+        failed: String? = null,
+        typed: String? = null,
     ): Bitmap {
         val headingPaint = paint(color = muted, size = HEADING_SIZE)
         val bodyPaint = paint(color = ink, size = BODY_SIZE)
         val timePaint = paint(color = ink, size = BODY_SIZE, typeface = durationTypeface)
         val paramsPaint = paint(color = muted, size = PARAMS_SIZE - 2f)
+        // A lost game's time cell leads with the word, so the column is measured with it: a
+        // column sized for a duration alone would clip the word off the front of its row.
+        val timeText: (Record) -> String = { record ->
+            if (record.failed == true && failed != null) {
+                "$failed ${formatDuration(record.seconds)}"
+            } else {
+                formatDuration(record.seconds)
+            }
+        }
+        val paramsText: (Record) -> String = { record ->
+            if (record.typedSeed && typed != null) {
+                "${params(record.key)} $typed"
+            } else {
+                params(record.key)
+            }
+        }
 
         // One cell per column, already reduced to the width it asks for.
         val gameWidth: (Record) -> Float = { record ->
-            bodyPaint.measureText(name(record.key)) + CELL_GAP + paramsPaint.measureText(params(record.key))
+            bodyPaint.measureText(name(record.key)) + CELL_GAP + paramsPaint.measureText(paramsText(record))
         }
         val widths =
             floatArrayOf(
                 columnWidth(headers[0].widthIn(headingPaint), records.map { it.playerName.ifBlank { unknown }.widthIn(bodyPaint) }),
                 columnWidth(headers[1].widthIn(headingPaint), records.map(gameWidth)),
-                columnWidth(headers[2].widthIn(headingPaint), records.map { formatDuration(it.seconds).widthIn(timePaint) }),
+                columnWidth(headers[2].widthIn(headingPaint), records.map { timeText(it).widthIn(timePaint) }),
                 columnWidth(headers[3].widthIn(headingPaint), records.map { formatStamp(it.finishedAt).widthIn(bodyPaint) }),
             )
         val tableWidth = widths.sum()
@@ -279,14 +310,14 @@ object RecordImage {
             val gameName = name(record.key)
             canvas.cell(gameName, column + CELL_PADDING, top, bodyPaint)
             canvas.cellBeside(
-                params(record.key),
+                paramsText(record),
                 column + CELL_PADDING + bodyPaint.measureText(gameName) + CELL_GAP,
                 top,
                 bodyPaint,
                 paramsPaint,
             )
             column += widths[1]
-            canvas.cell(formatDuration(record.seconds), column + CELL_PADDING, top, timePaint)
+            canvas.cell(timeText(record), column + CELL_PADDING, top, timePaint)
             column += widths[2]
             canvas.cell(formatStamp(record.finishedAt), column + CELL_PADDING, top, bodyPaint)
             canvas.drawLine(

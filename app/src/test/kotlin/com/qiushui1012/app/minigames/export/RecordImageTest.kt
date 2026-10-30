@@ -47,6 +47,7 @@ class RecordImageTest {
         when (key) {
             is RecordKey.Pipes -> "Pipes"
             is RecordKey.Sudoku -> "Sudoku"
+            is RecordKey.Minesweeper -> "Minesweeper"
         }
     }
 
@@ -55,6 +56,7 @@ class RecordImageTest {
         when (key) {
             is RecordKey.Pipes -> "${key.size}x${key.size}"
             is RecordKey.Sudoku -> key.difficulty
+            is RecordKey.Minesweeper -> "${key.width}x${key.height}, ${key.mines} mines"
         }
     }
 
@@ -105,5 +107,40 @@ class RecordImageTest {
         assertTrue(bitmap.width > 0)
         assertTrue(bitmap.height > 0)
         assertEquals(Bitmap.Config.ARGB_8888, bitmap.config)
+    }
+
+    @Test
+    fun a_failed_record_keeps_its_time_and_adds_the_word() {
+        // A lost game is a fact worth exporting, and its duration is still the fact it is. The
+        // card therefore says both, and a column holding one is wider than a column of times
+        // alone: a column sized for the times would clip the word off the front of its row.
+        val lost = pipes(53).copy(failed = true)
+        val won = pipes(53)
+        val lostCard = RecordImage.single(lost, name, params, "Unnamed", "exported", Typeface.MONOSPACE, failed = "Failed")
+        assertEquals(RecordImage.width(), lostCard.width)
+        assertTrue("the card lost its bottom", lostCard.height > 0)
+        val lostColumn =
+            RecordImage.several(listOf(lost), name, params, "Unnamed", "exported", "Play records", HEADERS, Typeface.MONOSPACE, failed = "Failed")
+        val wonColumn = several(listOf(won))
+        assertTrue("the failed word did not widen the time column", lostColumn.width > wonColumn.width)
+    }
+
+    @Test
+    fun a_hand_typed_seed_widens_the_game_column() {
+        // The mark is appended to the parameters, so it is the game column that has to grow.
+        val typedRecord = pipes(90).copy(typedSeed = true)
+        val typedColumn =
+            RecordImage.several(
+                listOf(typedRecord),
+                name,
+                params,
+                "Unnamed",
+                "exported",
+                "Play records",
+                HEADERS,
+                Typeface.MONOSPACE,
+                typed = "Entered by hand",
+            )
+        assertTrue("the typed mark did not widen the game column", typedColumn.width > several(listOf(pipes(90))).width)
     }
 }

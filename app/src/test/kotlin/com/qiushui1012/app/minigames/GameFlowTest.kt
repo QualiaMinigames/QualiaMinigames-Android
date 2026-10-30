@@ -23,6 +23,9 @@ import com.qiushui1012.app.minigames.data.RecordsFile
 import com.qiushui1012.app.minigames.data.RecordsStore
 import com.qiushui1012.app.minigames.data.SavedGame
 import com.qiushui1012.app.minigames.export.RecordImage
+import com.qiushui1012.app.minigames.rules.MinesweeperEvent
+import com.qiushui1012.app.minigames.rules.MinesweeperMode
+import com.qiushui1012.app.minigames.rules.MinesweeperPhase
 import com.qiushui1012.app.minigames.rules.PipesLayout
 import com.qiushui1012.app.minigames.rules.Rules
 import com.qiushui1012.app.minigames.rules.SudokuDifficulty
@@ -208,5 +211,83 @@ class GameFlowTest {
             )
         assertTrue(several.width > 0)
         assertTrue(several.height > 0)
+    }
+
+    @Test
+    fun a_lost_minesweeper_game_writes_a_failed_record_and_clears_its_save() = runBlocking {
+        val store = newStore()
+        val board = requireNotNull(Rules.minesweeperFromSeed(9, 9, 10, MinesweeperMode.Normal, 5))
+        store.putSave(SavedGame(GameKind.Minesweeper, board.toSnapshot(), "QiuShui", 12, 1_000))
+        // A board started from a seed is laid down at once, so a mine can be found by opening
+        // cells until one explodes: the test reads the board rather than knowing it.
+        val mine =
+            (0 until board.cellCount).first { index ->
+                val probe = requireNotNull(Rules.minesweeperFromSeed(9, 9, 10, MinesweeperMode.Normal, 5))
+                probe.reveal(index) == MinesweeperEvent.HitMine
+            }
+        assertEquals(MinesweeperEvent.HitMine, board.reveal(mine))
+        assertEquals(MinesweeperPhase.Lost, board.phase)
+
+        val record =
+            Record(
+                key = RecordKey.Minesweeper(9, 9, 10, noGuess = false),
+                playerName = "QiuShui",
+                seconds = 12,
+                finishedAt = 2_000,
+                seed = board.seed,
+                failed = true,
+            )
+        store.addRecord(record)
+        store.clearSave(GameKind.Minesweeper)
+
+        assertNull("a lost game leaves no save", store.save(GameKind.Minesweeper).first())
+        assertEquals(true, store.records.first().single().failed)
+        assertNull("a loss is not a best time", store.best(record.key).first())
+    }
+
+    @Test
+    fun a_saved_minesweeper_game_is_restored_with_its_flags_and_its_open_cells() {
+        val board = requireNotNull(Rules.newMinesweeper(16, 16, 40, MinesweeperMode.Normal, 21))
+        board.reveal(120)
+        board.toggleFlag(0)
+        val save = SavedGame(GameKind.Minesweeper, board.toSnapshot(), "QiuShui", 33, 1_000)
+
+        val resumed = requireNotNull(restoreGame(save)) as GameInProgress.Minesweeper
+        assertEquals("QiuShui", resumed.playerName)
+        assertEquals(33, resumed.elapsedSeconds)
+        assertEquals(board.cellsState(), resumed.board.cellsState())
+        assertEquals(board.remainingMines, resumed.board.remainingMines)
+        assertEquals(RecordKey.Minesweeper(16, 16, 40, noGuess = false), resumed.key)
+    }
+
+    @Test
+    fun a_minesweeper_game_that_fell_back_is_filed_as_a_normal_board() {
+        // A 4 by 4 board at 12 mines can never be deduced, so every no-guess attempt falls back.
+        // The record has to say normal, because that is the board the player actually played.
+        val board = requireNotNull(Rules.newMinesweeper(4, 4, 12, MinesweeperMode.NoGuess, 1))
+        board.reveal(5)
+        assertEquals(true, board.fellBack)
+        val game = GameInProgress.Minesweeper(board, "QiuShui", 3)
+        assertEquals(RecordKey.Minesweeper(4, 4, 12, noGuess = false), game.key)
+    }
+
+    @Test
+    fun a_typed_seed_reaches_the_record() {
+        // The flag is what tells a history that the seed was chosen rather than produced, and
+        // it travels with the game rather than with the record's key: two games on one board
+        // are the same group whether or not either seed was typed.
+        val board = requireNotNull(Rules.minesweeperFromSeed(9, 9, 10, MinesweeperMode.Normal, 4_242))
+        val game = GameInProgress.Minesweeper(board, "QiuShui", 8, typedSeed = true)
+        val record =
+            Record(
+                key = game.key,
+                playerName = game.playerName,
+                seconds = 8,
+                finishedAt = 2_000,
+                seed = game.seed,
+                typedSeed = game.typedSeed,
+            )
+        assertEquals(true, record.typedSeed)
+        assertEquals(4_242L, record.seed)
     }
 }

@@ -22,6 +22,8 @@
     <string name="home_pipes_summary">%1$d × %1$d, %2$s</string>
     <string name="home_sudoku_name">Sudoku</string>
     <string name="home_sudoku_summary">%1$s</string>
+    <string name="home_minesweeper_name">Minesweeper</string>
+    <string name="home_minesweeper_summary">%1$d × %2$d, %3$d mines, %4$s</string>
 
     <!-- Pipes -->
     <string name="pipes_layout_flat">flat</string>
@@ -45,6 +47,36 @@
     <string name="sudoku_erase">Erase</string>
     <string name="sudoku_won">Solved</string>
 
+    <!-- Minesweeper -->
+    <string name="minesweeper_preset_beginner">Beginner 9 × 9, 10 mines</string>
+    <string name="minesweeper_preset_intermediate">Intermediate 16 × 16, 40 mines</string>
+    <string name="minesweeper_preset_expert">Expert 30 × 16, 99 mines</string>
+    <string name="minesweeper_width_range">Width (4–128)</string>
+    <string name="minesweeper_height_range">Height (4–128)</string>
+    <string name="minesweeper_slider_ticks">Slider range 4–35</string>
+    <string name="minesweeper_mines">Mines</string>
+    <string name="minesweeper_mines_helper_percent">%1$s of the board</string>
+    <string name="minesweeper_mines_helper_count">%1$d mines</string>
+    <string name="minesweeper_snap_casual">Casual 12%</string>
+    <string name="minesweeper_snap_beginner">Beginner 12.3%</string>
+    <string name="minesweeper_snap_standard">Standard 15%</string>
+    <string name="minesweeper_snap_intermediate">Intermediate 15.6%</string>
+    <string name="minesweeper_snap_hard">Hard 18%</string>
+    <string name="minesweeper_snap_expert_classic">Expert 20.6%</string>
+    <string name="minesweeper_snap_expert">Specialist 22%</string>
+    <string name="minesweeper_snap_extreme">Extreme 25%</string>
+    <string name="minesweeper_mode">Mode</string>
+    <string name="minesweeper_mode_normal">Normal</string>
+    <string name="minesweeper_mode_no_guess">No guessing</string>
+    <string name="minesweeper_mode_normal_hint">A guess may be needed</string>
+    <string name="minesweeper_mode_no_guess_hint">No guessing is needed</string>
+    <string name="minesweeper_mode_no_guess_warning">The board is very likely to fall back to normal mode</string>
+    <string name="minesweeper_fell_back">No-guess generation failed, so this game fell back to normal mode</string>
+    <string name="minesweeper_generating">Generating the board</string>
+    <string name="minesweeper_mines_counter">%1$d of %2$d left</string>
+    <string name="minesweeper_lost">Hit a mine</string>
+    <string name="minesweeper_won">Cleared</string>
+
     <!-- Play -->
     <string name="play_undo">Undo</string>
     <string name="play_back">Back</string>
@@ -61,6 +93,9 @@
     <string name="dialog_discard_title">Discard it?</string>
     <string name="dialog_discard_save">A game is still in progress. OK discards it and starts a new game.</string>
     <string name="dialog_restore_failed">This saved game was written by another version of the rules and cannot be opened.</string>
+    <string name="dialog_seed">Seed</string>
+    <string name="dialog_seed_hint">Leave empty for a random one</string>
+    <string name="sudoku_seed_failed">This seed cannot produce a puzzle of this difficulty</string>
 
     <!-- Records -->
     <string name="records_title">Records</string>
@@ -90,6 +125,9 @@
     <string name="records_column_game">Game</string>
     <string name="records_column_time">Time</string>
     <string name="records_column_finished">Finished</string>
+    <string name="records_failed">Failed</string>
+    <string name="records_typed_seed">Entered by hand</string>
+    <string name="records_seed_copied">Copied</string>
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>
@@ -117,6 +155,8 @@
     <string name="action_save">Save</string>
     <string name="cd_pipes_board">Pipes board</string>
     <string name="cd_sudoku_board">Sudoku board</string>
+    <string name="cd_minesweeper_board">Minesweeper board</string>
+    <string name="cd_copy_seed">Copy the seed</string>
     <string name="cd_zoom_in">Zoom in</string>
     <string name="cd_zoom_out">Zoom out</string>
     <string name="cd_reset_zoom">Reset the view</string>

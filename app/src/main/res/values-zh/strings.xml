@@ -16,6 +16,8 @@
     <string name="home_pipes_summary">%1$d × %1$d，%2$s</string>
     <string name="home_sudoku_name">数独</string>
     <string name="home_sudoku_summary">%1$s</string>
+    <string name="home_minesweeper_name">扫雷</string>
+    <string name="home_minesweeper_summary">%1$d × %2$d，%3$d 颗雷，%4$s</string>
 
     <string name="pipes_layout_flat">平边</string>
     <string name="pipes_layout_wrapped">跨边</string>
@@ -37,6 +39,36 @@
     <string name="sudoku_erase">清除</string>
     <string name="sudoku_won">已完成</string>
 
+    <!-- 扫雷 -->
+    <string name="minesweeper_preset_beginner">经典初级 9 × 9，10 颗雷</string>
+    <string name="minesweeper_preset_intermediate">经典中级 16 × 16，40 颗雷</string>
+    <string name="minesweeper_preset_expert">经典高级 30 × 16，99 颗雷</string>
+    <string name="minesweeper_width_range">宽度（4~128）</string>
+    <string name="minesweeper_height_range">高度（4~128）</string>
+    <string name="minesweeper_slider_ticks">滑块范围 4~35</string>
+    <string name="minesweeper_mines">雷数</string>
+    <string name="minesweeper_mines_helper_percent">占盘面 %1$s</string>
+    <string name="minesweeper_mines_helper_count">%1$d 颗</string>
+    <string name="minesweeper_snap_casual">休闲 12%</string>
+    <string name="minesweeper_snap_beginner">经典初级 12.3%</string>
+    <string name="minesweeper_snap_standard">标准 15%</string>
+    <string name="minesweeper_snap_intermediate">经典中级 15.6%</string>
+    <string name="minesweeper_snap_hard">困难 18%</string>
+    <string name="minesweeper_snap_expert_classic">经典高级 20.6%</string>
+    <string name="minesweeper_snap_expert">专家 22%</string>
+    <string name="minesweeper_snap_extreme">极限 25%</string>
+    <string name="minesweeper_mode">模式</string>
+    <string name="minesweeper_mode_normal">普通</string>
+    <string name="minesweeper_mode_no_guess">无猜</string>
+    <string name="minesweeper_mode_normal_hint">可能需要进行猜测</string>
+    <string name="minesweeper_mode_no_guess_hint">不需要进行任何猜测</string>
+    <string name="minesweeper_mode_no_guess_warning">盘面有很大可能会回退到普通模式</string>
+    <string name="minesweeper_fell_back">无猜生成失败，本局已回退到普通模式</string>
+    <string name="minesweeper_generating">正在生成盘面</string>
+    <string name="minesweeper_mines_counter">剩余 %1$d / %2$d</string>
+    <string name="minesweeper_lost">踩雷</string>
+    <string name="minesweeper_won">已完成</string>
+
     <string name="play_undo">撤销</string>
     <string name="play_back">返回</string>
     <string name="play_time">%1$s</string>
@@ -51,6 +83,9 @@
     <string name="dialog_discard_title">是否丢弃？</string>
     <string name="dialog_discard_save">仍有未完成的对局，点击确定将会丢弃该对局并开始新对局。</string>
     <string name="dialog_restore_failed">这份存档由另一个版本的规则写入，无法打开。</string>
+    <string name="dialog_seed">种子</string>
+    <string name="dialog_seed_hint">留空则随机</string>
+    <string name="sudoku_seed_failed">该种子无法生成此难度的题目，请换一个种子</string>
 
     <string name="records_title">记录</string>
     <string name="records_empty">还没有任何记录。</string>
@@ -79,6 +114,9 @@
     <string name="records_column_game">玩法</string>
     <string name="records_column_time">用时</string>
     <string name="records_column_finished">完成时间</string>
+    <string name="records_failed">失败</string>
+    <string name="records_typed_seed">手动输入</string>
+    <string name="records_seed_copied">已复制</string>
 
     <string name="settings_title">设置</string>
     <string name="settings_player">默认玩家名</string>
@@ -104,6 +142,8 @@
     <string name="action_save">保存</string>
     <string name="cd_pipes_board">接水管棋盘</string>
     <string name="cd_sudoku_board">数独棋盘</string>
+    <string name="cd_minesweeper_board">扫雷棋盘</string>
+    <string name="cd_copy_seed">复制种子</string>
     <string name="cd_zoom_in">放大</string>
     <string name="cd_zoom_out">缩小</string>
     <string name="cd_reset_zoom">复位视图</string>

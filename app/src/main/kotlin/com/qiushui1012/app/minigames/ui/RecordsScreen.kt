@@ -34,11 +34,13 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -67,6 +70,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -132,6 +136,8 @@ fun RecordsScreen(
             stringResource(R.string.records_column_finished),
         )
     val exportTitle = stringResource(R.string.records_export_title)
+    val failedLabel = stringResource(R.string.records_failed)
+    val typedSeedLabel = stringResource(R.string.records_typed_seed)
     val durationTypeface =
         remember(context) {
             ResourcesCompat.getFont(context, R.font.cascadia_code) ?: android.graphics.Typeface.MONOSPACE
@@ -141,6 +147,10 @@ fun RecordsScreen(
         if (selection.isEmpty()) {
             return
         }
+        // The two marks a record can carry are resolved here, where the language is known, for
+        // the same reason the parameters are: the drawing runs outside the composition.
+        val failedLabel = failedLabel
+        val typedLabel = typedSeedLabel
         scope.launch {
             val saved =
                 withContext(Dispatchers.Default) {
@@ -153,6 +163,8 @@ fun RecordsScreen(
                                 unknown = unknownPlayer,
                                 exportedAt = exportedAtLabel,
                                 durationTypeface = durationTypeface,
+                                failed = failedLabel,
+                                typed = typedLabel,
                             )
                         } else {
                             RecordImage.several(
@@ -164,6 +176,8 @@ fun RecordsScreen(
                                 title = exportTitle,
                                 headers = headers,
                                 durationTypeface = durationTypeface,
+                                failed = failedLabel,
+                                typed = typedLabel,
                             )
                         }
                     ImageExport.save(context, bitmap, "qualia-minigames-${System.currentTimeMillis()}.png")
@@ -412,7 +426,9 @@ private fun RecordGroup(
     onToggle: (String) -> Unit,
     onOpen: (Record) -> Unit,
 ) {
-    val best = records.minByOrNull { it.seconds }
+    // A best time is a cleared board's time: a game that ended on a mine is a record of the
+    // game, not a time to beat.
+    val best = records.filter { it.failed != true }.minByOrNull { it.seconds }
     SectionCard(
         header = {
             Row(
@@ -466,18 +482,56 @@ private fun RecordGroup(
                         record.playerName.ifBlank { stringResource(R.string.records_unknown_player) },
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    Text(
-                        listStamp.format(Instant.ofEpochMilli(record.finishedAt).atZone(ZoneId.systemDefault())),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    RecordMarks(record)
                 }
                 Text(
-                    formatDuration(record.seconds),
+                    if (record.failed == true) {
+                        stringResource(R.string.records_failed)
+                    } else {
+                        formatDuration(record.seconds)
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     fontFamily = DurationFont,
+                    color =
+                        if (record.failed == true) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
                 )
             }
+        }
+    }
+}
+
+/**
+ * The line under a record's player: when it finished, and how it was started.
+ *
+ * A loss and a hand-picked seed are the two facts a list of times cannot show, so both are
+ * written here rather than left to the detail dialog: a player comparing two rows of one card
+ * should not have to open each of them to find out why one of the times is short.
+ */
+@Composable
+private fun RecordMarks(record: Record) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+        Text(
+            listStamp.format(Instant.ofEpochMilli(record.finishedAt).atZone(ZoneId.systemDefault())),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (record.failed == true) {
+            Text(
+                stringResource(R.string.records_failed),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        if (record.typedSeed) {
+            Text(
+                stringResource(R.string.records_typed_seed),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -489,13 +543,27 @@ private fun Modifier.clickableRow(onClick: () -> Unit): Modifier = this.clickabl
  * The dialog that shows one record in full.
  *
  * Everything the record holds is here, including the seed: the list is a summary, and the seed
- * is the one field that says which puzzle this was.
+ * is the one field that says which puzzle this was. A record with a seed offers to copy it,
+ * because a seed is meant to be typed into the field of the next game and retyping eighteen
+ * digits from a screenshot is not what the record is for.
  */
 @Composable
 fun RecordDetailDialog(
     record: Record,
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+    val copied = stringResource(R.string.records_seed_copied)
+    var copiedShown by remember { mutableStateOf(false) }
+    // The badge clears itself: a word that stayed on screen would be a statement about the
+    // clipboard rather than about the tap that filled it.
+    LaunchedEffect(copiedShown) {
+        if (copiedShown) {
+            delay(2_000)
+            copiedShown = false
+        }
+    }
     ModalForm(
         title = stringResource(R.string.records_detail_title),
         onDismiss = onDismiss,
@@ -514,22 +582,80 @@ fun RecordDetailDialog(
             )
             Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
                 Text(stringResource(R.string.records_column_time), style = MaterialTheme.typography.labelLarge)
-                Text(
-                    formatDuration(record.seconds),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontFamily = DurationFont,
-                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
+                    Text(
+                        if (record.failed == true) {
+                            stringResource(R.string.records_failed)
+                        } else {
+                            stringResource(R.string.minesweeper_won)
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color =
+                            if (record.failed == true) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                    )
+                    Text(
+                        formatDuration(record.seconds),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontFamily = DurationFont,
+                    )
+                }
             }
             LabeledValue(
                 stringResource(R.string.records_column_finished),
                 listStamp.format(Instant.ofEpochMilli(record.finishedAt).atZone(ZoneId.systemDefault())),
             )
-            LabeledValue(
-                stringResource(R.string.records_detail_seed),
-                // A record written before seeds were kept has none, and inventing one would be a
-                // number that does not generate this puzzle.
-                record.seed?.toString() ?: "-",
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+                Text(stringResource(R.string.records_detail_seed), style = MaterialTheme.typography.labelLarge)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Space.s),
+                ) {
+                    Text(
+                        // A record written before seeds were kept has none, and inventing one
+                        // would be a number that does not generate this puzzle.
+                        record.seed?.toString() ?: "-",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontFamily = DurationFont,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (copiedShown) {
+                        Text(
+                            copied,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            record.seed?.let { seed ->
+                                clipboard?.setPrimaryClip(
+                                    android.content.ClipData.newPlainText(
+                                        context.getString(R.string.dialog_seed),
+                                        seed.toString(),
+                                    ),
+                                )
+                                copiedShown = true
+                            }
+                        },
+                        enabled = record.seed != null,
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_content_copy),
+                            contentDescription = stringResource(R.string.cd_copy_seed),
+                        )
+                    }
+                }
+            }
+            if (record.typedSeed) {
+                LabeledValue(
+                    stringResource(R.string.records_detail_seed),
+                    stringResource(R.string.records_typed_seed),
+                )
+            }
         }
     }
 }
@@ -551,7 +677,7 @@ fun ClearRecordsDialog(
 
 /** Groups records by the game they belong to, pipes first. */
 fun recordsByKind(records: List<Record>): List<Pair<GameKind, List<Record>>> =
-    listOf(GameKind.Pipes, GameKind.Sudoku).mapNotNull { kind ->
+    listOf(GameKind.Pipes, GameKind.Sudoku, GameKind.Minesweeper).mapNotNull { kind ->
         val ofKind = records.filter { kindOf(it.key) == kind }
         if (ofKind.isEmpty()) null else kind to ofKind
     }
@@ -561,6 +687,7 @@ fun kindOf(key: RecordKey): GameKind =
     when (key) {
         is RecordKey.Pipes -> GameKind.Pipes
         is RecordKey.Sudoku -> GameKind.Sudoku
+        is RecordKey.Minesweeper -> GameKind.Minesweeper
     }
 
 /** Groups records by the parameters they were played with, in a stable order. */
@@ -570,12 +697,27 @@ fun groupRecords(records: List<Record>): List<Pair<RecordKey, List<Record>>> =
         .toList()
         .sortedWith(
             compareBy(
-                { (key, _) -> if (key is RecordKey.Pipes) 0 else 1 },
+                { (key, _) -> kindOrder(kindOf(key)) },
                 { (key, _) -> if (key is RecordKey.Pipes) key.size else 0 },
                 { (key, _) -> if (key is RecordKey.Pipes && key.wrapped) 1 else 0 },
                 { (key, _) -> if (key is RecordKey.Sudoku) key.difficulty else "" },
+                // A minesweeper group is filed by its width, its height, its mine count and
+                // its rules, in that order: a wider board first reads as a larger game, and
+                // the mode breaks the last tie.
+                { (key, _) -> if (key is RecordKey.Minesweeper) key.width else 0 },
+                { (key, _) -> if (key is RecordKey.Minesweeper) key.height else 0 },
+                { (key, _) -> if (key is RecordKey.Minesweeper) key.mines else 0 },
+                { (key, _) -> if (key is RecordKey.Minesweeper && key.noGuess) 1 else 0 },
             ),
         )
+
+/** Returns where a game's groups stand in the records page. */
+private fun kindOrder(kind: GameKind): Int =
+    when (kind) {
+        GameKind.Pipes -> 0
+        GameKind.Sudoku -> 1
+        GameKind.Minesweeper -> 2
+    }
 
 /** Returns the label of a game, which is its name in the interface's language. */
 @Composable
@@ -584,10 +726,17 @@ fun gameKindLabel(kind: GameKind): String =
         when (kind) {
             GameKind.Pipes -> R.string.home_pipes_name
             GameKind.Sudoku -> R.string.home_sudoku_name
+            GameKind.Minesweeper -> R.string.home_minesweeper_name
         },
     )
 
-/** Returns the label of a record's parameters. */
+/**
+ * Returns the label of a record's parameters.
+ *
+ * This is the one place the parameters of a game are written, and the home card, the game
+ * header and the exported image all read it: four spellings of "9 × 9, 10 mines" that drifted
+ * apart would be four answers to one question.
+ */
 @Composable
 fun keyLabel(key: RecordKey): String =
     when (key) {
@@ -600,7 +749,28 @@ fun keyLabel(key: RecordKey): String =
 
         is RecordKey.Sudoku ->
             stringResource(R.string.home_sudoku_summary, difficultyLabel(difficultyFromStorageName(key.difficulty)))
+
+        is RecordKey.Minesweeper ->
+            stringResource(
+                R.string.home_minesweeper_summary,
+                key.width,
+                key.height,
+                key.mines,
+                stringResource(
+                    if (key.noGuess) R.string.minesweeper_mode_no_guess else R.string.minesweeper_mode_normal,
+                ),
+            )
     }
+
+/** Returns the label of a minesweeper mode. */
+@Composable
+fun minesweeperModeLabel(mode: com.qiushui1012.app.minigames.rules.MinesweeperMode): String =
+    stringResource(
+        when (mode) {
+            com.qiushui1012.app.minigames.rules.MinesweeperMode.Normal -> R.string.minesweeper_mode_normal
+            com.qiushui1012.app.minigames.rules.MinesweeperMode.NoGuess -> R.string.minesweeper_mode_no_guess
+        },
+    )
 
 /** Returns a duration as `m:ss`, or `h:mm:ss` past an hour. */
 fun formatDuration(seconds: Long): String {
