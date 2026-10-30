@@ -16,7 +16,6 @@ package com.qiushui1012.app.minigames.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculatePan
@@ -36,6 +35,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -60,11 +60,16 @@ import kotlin.math.min
  *
  * # One gesture loop, not three
  *
- * A tap, a long press, a pinch and a drag are recognised by a single loop rather than by three
+ * A tap, a long press, a pinch and a drag are recognised by a single loop rather than by
  * `detect…Gestures` helpers stacked on one modifier. Stacked detectors compete for the same
  * pointer: the drag detector consumes the movement of every down, and the tap detector then
  * never sees an up it may report. The loop here decides what a gesture is from how many
  * pointers it has and how far they moved, which is the only way the four can coexist.
+ *
+ * A double tap is not one of them, and the board does not reset its zoom on one. A tap is what
+ * turns a piece and what selects a cell, so two taps in a row are two moves: reading them as a
+ * gesture of their own would undo the zoom the player had just set, on the very move they were
+ * making. Pinching back out to the whole board is the way to leave a zoomed view.
  *
  * # The edge shadow
  *
@@ -92,8 +97,6 @@ fun ZoomableBoard(
     onTap: (row: Int, column: Int) -> Unit = { _, _ -> },
     /** Called with the cell under a long press. */
     onLongPress: (row: Int, column: Int) -> Unit = { _, _ -> },
-    /** Called when the view is reset, which a double tap does. */
-    onDoubleTap: () -> Unit = {},
 ) {
     val density = LocalDensity.current
     // Read outside the canvas: a DrawScope is not a composable scope, so a theme value has to
@@ -109,7 +112,6 @@ fun ZoomableBoard(
     val currentPan by rememberUpdatedState(pan)
     val tapHandler by rememberUpdatedState(onTap)
     val pressHandler by rememberUpdatedState(onLongPress)
-    val doubleTapHandler by rememberUpdatedState(onDoubleTap)
 
     val fit =
         if (view.width == 0 || boardWidth == 0f) {
@@ -242,18 +244,6 @@ fun ZoomableBoard(
                         }
                     }
                 }
-                // A double tap resets the view. It is its own detector because recognising it
-                // needs the time between two gestures, which the loop above has already
-                // forgotten by the time the second one starts.
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onDoubleTap = {
-                            pan = Offset.Zero
-                            zoom = minZoom
-                            doubleTapHandler()
-                        },
-                    )
-                },
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             if (view.width == 0 || boardWidth == 0f) {
@@ -263,11 +253,18 @@ fun ZoomableBoard(
             val originX = (size.width - boardWidth * scale) / 2f + pan.x
             val originY = (size.height - boardHeight * scale) / 2f + pan.y
 
-            withTransform({
-                translate(originX, originY)
-                scale(scale, scale, pivot = Offset.Zero)
-            }) {
-                content(scale)
+            // A zoomed board is larger than the view, and without this it is drawn past the
+            // view's edges: pieces appear over the header and the status bar, and the shadow
+            // bands — which mark the view's own edges — end up in the middle of the picture.
+            // The clip is the view, so the board ends exactly where the shadows begin and a
+            // band always lies on the board it is saying more of.
+            clipRect(left = 0f, top = 0f, right = size.width, bottom = size.height) {
+                withTransform({
+                    translate(originX, originY)
+                    scale(scale, scale, pivot = Offset.Zero)
+                }) {
+                    content(scale)
+                }
             }
 
             drawEdgeShadows(

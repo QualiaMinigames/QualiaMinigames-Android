@@ -38,6 +38,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.luminance
@@ -50,10 +52,10 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.sp
 import com.qiushui1012.app.minigames.AlertDark
 import com.qiushui1012.app.minigames.AlertLight
+import com.qiushui1012.app.minigames.EnteredDigit
 import com.qiushui1012.app.minigames.R
 import com.qiushui1012.app.minigames.Space
-import com.qiushui1012.app.minigames.WaterDark
-import com.qiushui1012.app.minigames.WaterLight
+import com.qiushui1012.app.minigames.Water
 import com.qiushui1012.app.minigames.data.Settings
 import com.qiushui1012.app.minigames.rules.PipesBoard
 import com.qiushui1012.app.minigames.rules.PipesLayout
@@ -63,10 +65,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 
 /**
- * The density the board's text is measured against.
+ * The density a board's text is measured against.
  *
- * The board is drawn in its own units and scaled by the canvas transform, so a size in sp`n * has to mean a size in board units. A density of one makes it exactly that; the window's
- * own density would turn the digit into something hundreds of cells wide.
+ * The text of a board is measured in screen pixels and drawn at the reciprocal of the canvas
+ * scale, so that a layout's size — which is rounded to whole pixels — is a negligible fraction
+ * of the glyph. Measuring a digit at one board unit instead rounded it to nothing, and the
+ * arithmetic that centred it put a fifth of its width outside the cell; measuring at the
+ * on-screen size also rasterises the glyph once at the resolution it is seen at, rather than
+ * magnifying a tiny one.
  */
 private val BoardTextDensity = Density(1f, 1f)
 
@@ -119,7 +125,6 @@ fun PipesPlay(
     settings: Settings,
     onSolved: () -> Unit,
 ) {
-    var revision by remember { mutableIntStateOf(0) }
     // The pump stands still, so its cell is read once rather than on every frame.
     val waterStart = remember(board) { board.waterStart() }
     // The drawings live in `assets/`, and reading them needs the context that holds them.
@@ -127,11 +132,14 @@ fun PipesPlay(
     var loopCells by remember { mutableStateOf(board.loopCells().toSet()) }
     var waterCells by remember { mutableStateOf(board.waterCells().toSet()) }
     var solved by remember { mutableStateOf(board.isSolved()) }
+    // Every cell's piece, read in one call rather than one per cell: the drawing would otherwise
+    // cross the language boundary 1225 times for a single frame of the largest board.
+    var pieces by remember(board) { mutableStateOf(board.pieces()) }
 
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val wall = MaterialTheme.colorScheme.onBackground
     val loopWall = if (dark) AlertDark else AlertLight
-    val water = if (dark) WaterDark else WaterLight
+    val water = Water
     // An empty pipe shows the board rather than a lighter panel: a white lumen would put a
     // second colour into every cell and read as a highlight instead of as an empty pipe.
     val boardBackground = MaterialTheme.colorScheme.background
@@ -144,11 +152,32 @@ fun PipesPlay(
     }
 
     fun afterMove() {
-        revision += 1
         loopCells = board.loopCells().toSet()
         waterCells = board.waterCells().toSet()
         solved = board.isSolved()
+        pieces = board.pieces()
     }
+
+    // The board is recorded into a picture once per position rather than redrawn piece by piece
+    // every frame. A picture is a list of drawing commands, not pixels, so it stays sharp at any
+    // zoom the player pinches to.
+    val picture =
+        remember(context, size, pieces, loopCells, waterCells, waterStart, wall, loopWall, water, boardBackground) {
+            recordPipes(
+                context = context,
+                size = size,
+                pieces = pieces,
+                loopCells = loopCells,
+                waterCells = waterCells,
+                waterStart = waterStart,
+                wall = wall,
+                loopWall = loopWall,
+                water = water,
+                boardBackground = boardBackground,
+                gridLine = BoardLine,
+                gridWidth = BOARD_LINE,
+            )
+        }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(Space.m)) {
@@ -166,65 +195,10 @@ fun PipesPlay(
                     board.turnAntiClockwise(row * size + column)
                     afterMove()
                 },
-                content = { _ ->
-                    @Suppress("UNUSED_EXPRESSION")
-                    revision
-                    // The grid is drawn first, under the pieces: a wall covers the line it sits
-                    // on, so a grid drawn over the board would cut into every piece that reaches
-                    // an edge. The cell lines and the frame are one drawing at one width, which is
-                    // what makes the board read as a grid rather than as a picture with a border.
-                    for (line in 1 until size) {
-                        drawLine(
-                            color = BoardLine,
-                            start = Offset(line.toFloat(), 0f),
-                            end = Offset(line.toFloat(), size.toFloat()),
-                            strokeWidth = BOARD_LINE,
-                        )
-                        drawLine(
-                            color = BoardLine,
-                            start = Offset(0f, line.toFloat()),
-                            end = Offset(size.toFloat(), line.toFloat()),
-                            strokeWidth = BOARD_LINE,
-                        )
+                content = {
+                    drawIntoCanvas { canvas ->
+                        canvas.nativeCanvas.drawPicture(picture)
                     }
-                    // The frame sits on the boundary itself rather than inside it, so its two
-                    // halves lie either side of the edge and the board ends where its pieces do.
-                    drawRect(
-                        color = BoardLine,
-                        topLeft = Offset.Zero,
-                        size = Size(size.toFloat(), size.toFloat()),
-                        style = Stroke(width = BOARD_LINE),
-                    )
-                    for (row in 0 until size) {
-                        for (column in 0 until size) {
-                            val index = row * size + column
-                            val piece = board.piece(index)
-                            val placement = pipeShapeOf(piece) ?: continue
-                            val onLoop = index in loopCells
-                            val wet = index in waterCells
-                            drawPipe(
-                                context = context,
-                                cellX = column.toFloat(),
-                                cellY = row.toFloat(),
-                                shape = placement.first,
-                                turns = placement.second,
-                                wall = if (onLoop) loopWall else wall,
-                                lumen = if (wet) water else boardBackground,
-                            )
-                        }
-                    }
-                    // The pump goes over the pieces: it marks the cell the water comes from,
-                    // and a piece that covered it would hide the one cell the board is about.
-                    //
-                    // Its body keeps the colour its file declares, because a pump is a fitting
-                    // rather than a pipe and should not change with the theme. The drop on it is
-                    // painted in the water colour: the drop is what the pump feeds.
-                    drawPump(
-                        context = context,
-                        cellX = (waterStart % size).toFloat(),
-                        cellY = (waterStart / size).toFloat(),
-                        mark = water,
-                    )
                 },
                 modifier = Modifier.fillMaxSize(),
             )
@@ -267,7 +241,7 @@ fun SudokuPlay(
     val selectedColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
     val peerColor = MaterialTheme.colorScheme.surfaceVariant
     val givenColor = MaterialTheme.colorScheme.onBackground
-    val enteredColor = MaterialTheme.colorScheme.primary
+    val enteredColor = EnteredDigit
     val noteColor = MaterialTheme.colorScheme.onSurfaceVariant
     val boardBackground = MaterialTheme.colorScheme.surface
     val divider = MaterialTheme.colorScheme.outline
@@ -295,10 +269,15 @@ fun SudokuPlay(
                 onTap = { row, column ->
                     selected = row * 9 + column
                 },
-                content = { _ ->
+                content = { scale ->
                     @Suppress("UNUSED_EXPRESSION")
                     revision
                     val chosen = selected
+                    // One board unit is `scale` screen pixels, which is the size the text is
+                    // measured at: measuring a digit at its on-screen size is what keeps its
+                    // rounded layout a negligible fraction of it, and what lets it be drawn
+                    // once at the resolution it is seen at.
+                    val pixelsPerUnit = scale
                     // The board's own background is laid down once, before the shading: the
                     // shading is a tint over the board, so a fill on top of it would erase it
                     // and the selected cell would look exactly like every other one.
@@ -335,6 +314,7 @@ fun SudokuPlay(
                                 givenColor = givenColor,
                                 enteredColor = enteredColor,
                                 noteColor = noteColor,
+                                scale = pixelsPerUnit,
                             )
                         }
                     }
@@ -411,6 +391,7 @@ private fun DrawScope.drawCellText(
     givenColor: Color,
     enteredColor: Color,
     noteColor: Color,
+    scale: Float,
 ) {
     val index = row * 9 + column
     val digit = board.digit(index)
@@ -424,29 +405,28 @@ private fun DrawScope.drawCellText(
                 board.isGiven(index) -> givenColor
                 else -> enteredColor
             }
+        // One weight for every digit, given or entered. A given is told apart by its colour
+        // alone: a lighter stroke made a digit the player typed look like a note.
         val style =
             TextStyle(
                 color = color,
-                // The board is drawn in its own units and scaled by the canvas transform, so
-                // the text has to be measured in those units too. Measuring against a density
-                // of one makes one `sp` one board unit, which is one cell; the default density
-                // would make the digit hundreds of cells wide, because a board unit is not a
-                // pixel.
-                fontSize = (cellSize * 0.62f).sp,
-                fontWeight = if (board.isGiven(index)) FontWeight.SemiBold else FontWeight.Normal,
+                // The text is measured in screen pixels, so the size is the cell's size on
+                // screen times the fraction of it the digit fills.
+                fontSize = (cellSize * 0.62f * scale).sp,
+                fontWeight = FontWeight.SemiBold,
             )
         val layout = measurer.measure(digit.toString(), style, density = BoardTextDensity)
-        // The board is drawn in board units, so the text is measured at the size it would
-        // have in a cell one unit wide and then placed at the cell's centre. The scale of the
-        // whole board is applied by the caller's transform.
-        drawText(
-            textLayoutResult = layout,
-            topLeft =
-                Offset(
-                    centre.x - layout.size.width / 2f,
-                    centre.y - layout.size.height / 2f,
-                ),
-        )
+        // The layout is in screen pixels, and the canvas is in board units: the digit is placed
+        // at the scale that turns one into the other, around the cell's own centre.
+        withTransform({
+            translate(
+                centre.x - layout.size.width / 2f / scale,
+                centre.y - layout.size.height / 2f / scale,
+            )
+            scale(1f / scale, 1f / scale, pivot = Offset.Zero)
+        }) {
+            drawText(textLayoutResult = layout)
+        }
         return
     }
 
@@ -454,7 +434,7 @@ private fun DrawScope.drawCellText(
     if (notes == 0) {
         return
     }
-    val noteStyle = TextStyle(color = noteColor, fontSize = (cellSize * 0.22f).sp)
+    val noteStyle = TextStyle(color = noteColor, fontSize = (cellSize * 0.22f * scale).sp)
     for (noteDigit in 1..9) {
         if (notes and (1 shl noteDigit) == 0) {
             continue
@@ -462,14 +442,15 @@ private fun DrawScope.drawCellText(
         val noteRow = (noteDigit - 1) / 3
         val noteColumn = (noteDigit - 1) % 3
         val layout = measurer.measure(noteDigit.toString(), noteStyle, density = BoardTextDensity)
-        drawText(
-            textLayoutResult = layout,
-            topLeft =
-                Offset(
-                    column + (noteColumn + 0.5f) * (cellSize / 3f) - layout.size.width / 2f,
-                    row + (noteRow + 0.5f) * (cellSize / 3f) - layout.size.height / 2f,
-                ),
-        )
+        withTransform({
+            translate(
+                column + (noteColumn + 0.5f) * (cellSize / 3f) - layout.size.width / 2f / scale,
+                row + (noteRow + 0.5f) * (cellSize / 3f) - layout.size.height / 2f / scale,
+            )
+            scale(1f / scale, 1f / scale, pivot = Offset.Zero)
+        }) {
+            drawText(textLayoutResult = layout)
+        }
     }
 }
 

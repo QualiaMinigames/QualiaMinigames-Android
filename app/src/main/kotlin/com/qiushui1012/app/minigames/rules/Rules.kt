@@ -92,6 +92,15 @@ interface PipesBoard {
     /** Returns the side mask a cell shows now. */
     fun piece(index: Int): Int
 
+    /**
+     * Returns every cell's side mask at once, in row-major order.
+     *
+     * A board that is drawn asks for all of them in one frame, and one call per cell is one
+     * crossing of the language boundary per cell: 1225 of them for the largest board, which
+     * costs more than the drawing they feed.
+     */
+    fun pieces(): List<Int>
+
     /** Turns a cell a quarter turn clockwise. */
     fun turnClockwise(index: Int)
 
@@ -270,6 +279,8 @@ private class Pipes(private val game: FfiPipesGame) : PipesBoard {
     override val seed: Long = game.seed().toLong()
 
     override fun piece(index: Int): Int = game.piece(index.toUInt()).toInt()
+
+    override fun pieces(): List<Int> = game.pieces().map { it.toInt() }
 
     override fun turnClockwise(index: Int) {
         game.turnClockwise(index.toUInt())

@@ -26,6 +26,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 
 /**
@@ -101,11 +103,38 @@ val AlertLight = Color(0xFF8C1D18)
 /** The same red, lightened until it reads on a dark surface. */
 val AlertDark = Color(0xFFFFB4AB)
 
-/** The blue water is drawn in, dark enough to read against the plate. */
-val WaterLight = Color(0xFF1F5FA8)
+/**
+ * The blue water is drawn in.
+ *
+ * One blue for both schemes: it is light enough to read on the ink background and dark enough
+ * to tell apart from the plate, so the two schemes need no second value of it.
+ */
+val Water = Color(0xFFA8CAD4)
 
-/** The same blue, lightened for the ink background. */
-val WaterDark = Color(0xFF8FC4F0)
+/**
+ * The blue a sudoku digit the player entered is drawn in.
+ *
+ * One blue for both schemes, for the same reason [Water] needs only one: the tone reads on the
+ * white surface and on the ink one alike.
+ */
+val EnteredDigit = Color(0xFF81B2C0)
+
+/**
+ * The typeface every duration is written in.
+ *
+ * A duration is read by comparing it with another, so its digits have to be the same width as
+ * the digits above and below it in a list: a proportional face makes `1:07` narrower than
+ * `10:12` and the times stop lining up. The file is a subset of Cascadia Code holding the
+ * digits, the colon, the hyphen and the two quote marks, which is every character a duration
+ * and a seed can be written with; the whole face is about 390 KB, this is about 17 KB.
+ *
+ * A character outside the subset falls back to the platform's own font rather than a box, so
+ * the family is safe to use for anything, but only the times are drawn with it.
+ */
+val DurationFont: FontFamily =
+    FontFamily(
+        Font(R.font.cascadia_code, weight = androidx.compose.ui.text.font.FontWeight.Normal),
+    )
 
 /** The ink lifted just enough to be told apart from the background it sits on. */
 private val Raised = Color(0xFF16232A)

@@ -15,14 +15,16 @@
 package com.qiushui1012.app.minigames.ui
 
 import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Picture
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.asComposePath
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.graphics.drawscope.scale
-import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.PathParser
 import java.util.concurrent.ConcurrentHashMap
 
@@ -85,12 +87,6 @@ object PipeArt {
 
         /** A tube that branches in three directions: up, down and left. */
         Tee("pipe_tee.svg", PipeSides.TOP or PipeSides.BOTTOM or PipeSides.LEFT),
-
-        /** Two tubes crossing. */
-        Cross(
-            "pipe_x.svg",
-            PipeSides.TOP or PipeSides.RIGHT or PipeSides.BOTTOM or PipeSides.LEFT,
-        ),
     }
 
     /** The pump, the one drawing whose two paths are a body and a mark rather than walls. */
@@ -206,68 +202,150 @@ object PipeSides {
 }
 
 /**
- * Draws one pipe.
+ * Returns every piece's walls, one path per side mask, in cell units.
  *
- * [cellX] and [cellY] are the cell's top-left corner; [turns] is how many quarter turns clockwise
- * the drawing takes to face the way the piece joins.
+ * The board draws a few thousand cells from at most fourteen masks, so the geometry of a mask is
+ * built once and reused. Nothing here depends on a cell's position or on the board's zoom: a
+ * caller translates the path, and the canvas transform does the rest.
  *
- * The paths are filled in the order the file lists them, which is the order they were drawn in:
- * walls first, then the lumen that lies between them. Nothing is stroked, so a cell is drawn from
- * the shapes the file describes and every edge of it is anti-aliased by the canvas.
+ * The cache is per process and is keyed by nothing but the kind of path, because the shapes come
+ * from files that do not change while the application runs.
  */
-fun DrawScope.drawPipe(
-    context: Context,
-    cellX: Float,
-    cellY: Float,
-    shape: PipeArt.Shape,
-    turns: Int,
-    wall: Color,
-    lumen: Color,
-) {
-    val drawing = PipeArt.of(context, shape)
-    translate(cellX, cellY) {
-        scale(1f / PipeArt.SIZE, pivot = Offset.Zero) {
-            rotate(turns * 90f, pivot = Offset(PipeArt.CENTRE, PipeArt.CENTRE)) {
-                for (band in drawing.bands) {
-                    drawPath(
-                        path = band.path,
-                        color = if (band.isLumen) lumen else wall,
-                    )
-                }
+fun pipeWalls(context: Context): Map<Int, Path> = wallCache.getOrPut(EMPTY) { build(context, lumen = false) }
+
+/** The lumens of every piece, in cell units, built the same way as [pipeWalls]. */
+fun pipeLumens(context: Context): Map<Int, Path> = lumenCache.getOrPut(EMPTY) { build(context, lumen = true) }
+
+/** A marker key: both caches hold exactly one entry per process. */
+private const val EMPTY = ""
+
+/** The walls of every mask, built on first use. */
+private val wallCache = ConcurrentHashMap<String, Map<Int, Path>>()
+
+/** The lumens of every mask, built on first use. */
+private val lumenCache = ConcurrentHashMap<String, Map<Int, Path>>()
+
+/** Builds the paths of one kind over every mask the rules can produce. */
+private fun build(context: Context, lumen: Boolean): Map<Int, Path> {
+    val paths = HashMap<Int, Path>(14)
+    for (mask in 1..14) {
+        val placement = pipeShapeOf(mask) ?: continue
+        val drawing = PipeArt.of(context, placement.first)
+        val path = Path()
+        val matrix =
+            Matrix().apply {
+                scale(1f / PipeArt.SIZE, 1f / PipeArt.SIZE)
+                // A rotation turns about the origin, so the piece is moved to the centre first
+                // and back afterwards: that is the same pivot the board's own drawing used.
+                translate(PipeArt.CENTRE, PipeArt.CENTRE)
+                rotateZ(placement.second * 90f)
+                translate(-PipeArt.CENTRE, -PipeArt.CENTRE)
             }
+        for (band in drawing.bands) {
+            if (band.isLumen != lumen) {
+                continue
+            }
+            val bandPath = Path()
+            bandPath.addPath(band.path)
+            bandPath.transform(matrix)
+            path.addPath(bandPath)
         }
+        paths[mask] = path
     }
+    return paths
 }
 
 /**
- * Draws the pump on a cell.
+ * Records a whole pipes board into one picture, in board units.
  *
- * The file draws two faces: the square the fitting stands on, and the pump on it. The square keeps
- * the colour the file declares, because a pump is a fitting rather than a pipe and should not
- * change with the theme; the pump is painted in [mark], which the caller sets to the water colour,
- * because the water is what it moves.
+ * A board is static between moves: the pieces only change when the player turns one, and the
+ * water only spreads then too. Drawing it as several thousand paths every frame was the largest
+ * cost on a large board, so the finished board is recorded once and drawn as a single picture.
+ * The record is in board units, which keeps it sharp at any zoom: a picture is a list of vector
+ * commands, not pixels.
  *
- * The two are told apart by the order the file lists them in. Measuring would not work: the pump's
- * bounds are nearly as wide as the square's.
+ * The paths are painted in four passes — plain walls, loop walls, dry lumens, wet lumens — so the
+ * paint's colour is set four times rather than once per cell.
  */
-fun DrawScope.drawPump(
+fun recordPipes(
     context: Context,
-    cellX: Float,
-    cellY: Float,
-    mark: Color,
-) {
-    val drawing = PipeArt.pump(context)
-    if (drawing.bands.isEmpty()) {
-        return
+    size: Int,
+    pieces: List<Int>,
+    loopCells: Set<Int>,
+    waterCells: Set<Int>,
+    waterStart: Int,
+    wall: Color,
+    loopWall: Color,
+    water: Color,
+    boardBackground: Color,
+    gridLine: Color,
+    gridWidth: Float,
+): Picture {
+    val picture = Picture()
+    val native = picture.beginRecording(size, size)
+    val paint = Paint().apply { isAntiAlias = true; style = Paint.Style.FILL }
+    val walls = pipeWalls(context)
+    val lumens = pipeLumens(context)
+    val gridPaint = Paint().apply { isAntiAlias = true; style = Paint.Style.STROKE; strokeWidth = gridWidth }
+
+    // The grid is drawn first, under the pieces: a wall covers the line it sits on, so a grid
+    // drawn over the board would cut into every piece that reaches an edge.
+    gridPaint.color = gridLine.toArgb()
+    for (line in 1 until size) {
+        native.drawLine(line.toFloat(), 0f, line.toFloat(), size.toFloat(), gridPaint)
+        native.drawLine(0f, line.toFloat(), size.toFloat(), line.toFloat(), gridPaint)
     }
-    translate(cellX, cellY) {
-        scale(1f / PipeArt.SIZE, pivot = Offset.Zero) {
-            drawing.bands.forEachIndexed { index, band ->
-                val color = if (index == drawing.bands.lastIndex) mark else Color(band.color)
-                drawPath(path = band.path, color = color)
+    // The frame sits on the boundary itself rather than inside it, so its two halves lie either
+    // side of the edge and the board ends where its pieces do.
+    native.drawRect(0f, 0f, size.toFloat(), size.toFloat(), gridPaint)
+
+    val cells = size * size
+    for (pass in 0..3) {
+        paint.color =
+            when (pass) {
+                0 -> wall.toArgb()
+                1 -> loopWall.toArgb()
+                2 -> boardBackground.toArgb()
+                else -> water.toArgb()
             }
+        val lumen = pass >= 2
+        val wet = pass == 3
+        val path = if (lumen) lumens else walls
+        for (index in 0 until minOf(cells, pieces.size)) {
+            if ((index in loopCells) != (pass == 1)) {
+                continue
+            }
+            if (lumen && (index in waterCells) != wet) {
+                continue
+            }
+            val piecePath = path[pieces[index]] ?: continue
+            native.save()
+            native.translate((index % size).toFloat(), (index / size).toFloat())
+            native.drawPath(piecePath.asAndroidPath(), paint)
+            native.restore()
         }
     }
+
+    // The pump goes over the pieces: it marks the cell the water comes from, and a piece that
+    // covered it would hide the one cell the board is about. Its square is drawn larger than a
+    // pipe's lumen, so it covers the piece beneath it rather than being cut by it.
+    drawPumpInto(context, native, (waterStart % size).toFloat(), (waterStart / size).toFloat(), water)
+    picture.endRecording()
+    return picture
+}
+
+/** Draws the pump into [canvas] at a cell, in board units. */
+private fun drawPumpInto(context: Context, canvas: Canvas, cellX: Float, cellY: Float, mark: Color) {
+    val drawing = PipeArt.pump(context)
+    val paint = Paint().apply { isAntiAlias = true; style = Paint.Style.FILL }
+    canvas.save()
+    canvas.translate(cellX, cellY)
+    canvas.scale(1f / PipeArt.SIZE, 1f / PipeArt.SIZE)
+    drawing.bands.forEachIndexed { index, band ->
+        paint.color = if (index == drawing.bands.lastIndex) mark.toArgb() else band.color
+        canvas.drawPath(band.path.asAndroidPath(), paint)
+    }
+    canvas.restore()
 }
 
 /**

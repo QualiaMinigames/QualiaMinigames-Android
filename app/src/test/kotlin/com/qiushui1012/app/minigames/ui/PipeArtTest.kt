@@ -74,6 +74,24 @@ class PipeArtTest {
     }
 
     @Test
+    fun every_piece_is_built_in_cell_units() {
+        // The paths the board draws are the files' 24-unit drawings scaled into a unit square and
+        // turned to the mask's orientation, so every one of them has to land inside the cell it
+        // will be placed in. A path that escaped would draw over its neighbours.
+        val walls = pipeWalls(context)
+        val lumens = pipeLumens(context)
+        for (mask in 1..14) {
+            for (path in listOfNotNull(walls[mask], lumens[mask])) {
+                val bounds = path.getBounds()
+                assertTrue("mask $mask starts before its cell", bounds.left >= -0.01f)
+                assertTrue("mask $mask starts above its cell", bounds.top >= -0.01f)
+                assertTrue("mask $mask ends past its cell", bounds.right <= 1.01f)
+                assertTrue("mask $mask ends below its cell", bounds.bottom <= 1.01f)
+            }
+        }
+    }
+
+    @Test
     fun the_pump_reads_as_two_faces_in_two_colours() {
         val drawing = PipeArt.pump(context)
         assertEquals("the pump is a body and a mark", 2, drawing.bands.size)
@@ -85,7 +103,9 @@ class PipeArtTest {
 
     @Test
     fun every_piece_of_the_rules_has_a_shape_and_a_turn() {
-        for (mask in 1..15) {
+        // Masks one to fourteen are the pieces the rules generate: a cell never joins all four
+        // sides, so a cross is not among them.
+        for (mask in 1..14) {
             assertNotNull("mask $mask has no shape", pipeShapeOf(mask))
         }
     }
@@ -95,7 +115,7 @@ class PipeArtTest {
         // The property that matters: whatever pair is returned, turning the drawing's own sides by
         // that many quarter turns has to give back the mask the piece joins. A tee that turned the
         // wrong way would satisfy every other check here and draw the wrong piece.
-        for (mask in 1..15) {
+        for (mask in 1..14) {
             val (shape, turns) = requireNotNull(pipeShapeOf(mask))
             assertEquals(
                 "mask $mask is drawn as ${shape.file} turned $turns",
@@ -158,5 +178,10 @@ class PipeArtTest {
     @Test
     fun a_mask_that_is_not_a_piece_has_no_shape() {
         assertNull("an empty mask is not a piece", pipeShapeOf(0))
+        // Every side at once is the cross, which the rules never generate and no file draws.
+        assertNull(
+            "all four sides is not a piece",
+            pipeShapeOf(PipeSides.TOP or PipeSides.RIGHT or PipeSides.BOTTOM or PipeSides.LEFT),
+        )
     }
 }
