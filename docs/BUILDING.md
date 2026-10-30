@@ -65,16 +65,32 @@ gh secret set ANDROID_KEY_PASSWORD --repo QualiaMinigames/QualiaMinigames-Androi
 
 ```powershell
 # 1. Core：推标签，CI 校验后发布到 crates.io
-git -C ..\Core tag v0.1.0
-git -C ..\Core push origin v0.1.0
+git -C ..\Core tag -a v0.1.1 -m "qualia-minigames-core 0.1.1"
+git -C ..\Core push origin v0.1.1
 
 # 2. FFI：等 crates.io 上出现 Core 的版本后，再推 FFI 的标签
-git -C ..\FFI tag v0.1.0
-git -C ..\FFI push origin v0.1.0
+git -C ..\FFI tag -a v0.1.1 -m "qualia-minigames-ffi 0.1.1"
+git -C ..\FFI push origin v0.1.1
 
-# 3. Android：等 crates.io 上出现 FFI 的版本后，推本仓库
+# 3. Android：等 crates.io 上出现 FFI 的版本后，推本仓库并推标签
 git push origin main
+git tag -a v0.1.0 -m "QualiaMinigames-Android 0.1.0"
+git push origin v0.1.0
 ```
 
 本仓库的 CI 默认从 crates.io 取 `qualia-minigames-ffi`，与发布构建看到的是同一份来源。
 要验证尚未发布的 FFI，用 `-Pqualia.minigames.ffi.localDir=../FFI` 指向本地检出。
+
+新的 FFI 版本号发布后，`app/build.gradle.kts` 里两处要一起改：`ffiCrateVersion` 的默认值，
+以及 `ffiCrateSha256` 的默认值（crates.io 上该版本的 `checksum`）。只改前者会在下载后立刻
+被摘要校验拦下。
+
+## 三个仓库的版本号互相独立
+
+`Core` 与 `FFI` 的版本号只对 Rust 依赖有意义，应用的 `versionName` 由
+`app/build.gradle.kts` 决定。应用 0.1.0 可以用 Core/FFI 0.1.1：修复在核心库里发版，应用
+的对外版本只在界面或行为对用户可见地改变时才动。
+
+本仓库的 `v*` 标签触发 `.github/workflows/release.yml`：先核对标签与 `versionName` 是否
+一致，再用 Secrets 里的密钥签出 release 包、校验签名不是调试密钥、把 APK 与它的
+`.sha256` 一起传进 GitHub Release。`ci.yml` 只在推 main 与 PR 时运行，推标签不触发它。
