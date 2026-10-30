@@ -64,7 +64,10 @@ import kotlinx.coroutines.launch
 private const val SLIDER_MAX_SIZE = 35
 
 /** The most digits a size field accepts, which is what the largest board needs. */
-private const val MAX_SIZE_DIGITS = 3/**
+private const val MAX_SIZE_DIGITS = 3
+
+/** The share a form starts from when the settings hold nothing it can read. */
+private const val DEFAULT_PER_MILLE = 123/**
  * The dialog that starts a minesweeper game.
  *
  * # The order of the controls
@@ -107,13 +110,11 @@ fun MinesweeperNewGameDialog(
     var heightText by remember { mutableStateOf(height.toString()) }
     var mode by remember { mutableStateOf(minesweeperModeFromStorageName(settings.lastMinesweeperMode)) }
     // The share is the form's own state; the field shows it formatted, and a count typed into
-    // the field is converted once and kept as the share it came to.
+    // the field is converted once and kept as the share it came to. The settings keep the
+    // share as its own integer, so a value they cannot hold is the default rather than a
+    // second reading of the same text.
     var perMille by remember {
-        mutableStateOf(
-            settings.lastMinesweeperPercent.toIntOrNull()
-                ?: parsePerMille(settings.lastMinesweeperPercent)?.let { it }
-                ?: 123,
-        )
+        mutableStateOf(settings.lastMinesweeperPercent.toIntOrNull() ?: DEFAULT_PER_MILLE)
     }
     var minesText by remember { mutableStateOf(formatPerMille(perMille)) }
     // Whether the field currently holds a count rather than a share, which is what decides
