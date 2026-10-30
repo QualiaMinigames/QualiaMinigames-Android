@@ -1,14 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The bomb, drawn from Google Fonts Icons' "bomb" (24 by 24). The board paints it in the
-  warning red, so the file carries no colour of its own.
+  The mine the board reveals when a game is lost, taken from the minesweeper mark in
+  `assets/minesweeper.svg`: the same path the home card draws, so the board and the card show
+  one shape rather than two drawings of one.
+
+  The viewport is the mine's own bounds in that drawing, and the group moves the path into it.
+  The board tints the fill to the warning red, so the file's own colour is a placeholder.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="#FF000000"
-        android:pathData="M5.5,5.5c-1.24,0-2.25,1.01-2.25,2.25S4.26,10,5.5,10s2.25-1.01,2.25-2.25S6.74,5.5,5.5,5.5zM18,2.5l-2.47,2.47l-1.06-1.06L12.6,5.77l1.06,1.06L2.5,18l1.5,1.5l1.5-1.5l-1.5-1.5l11.16-11.16l1.06,1.06l1.86-1.86l-1.06-1.06L18,2.5z" />
+    android:viewportWidth="14.566"
+    android:viewportHeight="15">
+    <group
+        android:translateX="-28.717"
+        android:translateY="-28.741">
+        <path
+            android:fillColor="#FF000000"
+            android:fillType="evenOdd"
+            android:pathData="M33.717 43.741 C32.328 43.741 31.147 43.25 30.175 42.266 C29.203 41.283 28.717 40.097 28.717 38.708 C28.717 37.319 29.197 36.144 30.158 35.183 C31.119 34.222 32.294 33.741 33.683 33.741 L33.9 33.741 L34.35 32.958 C34.483 32.713 34.683 32.555 34.95 32.483 C35.217 32.411 35.472 32.447 35.717 32.591 L36.217 32.875 L36.3 32.741 C36.556 32.263 36.956 31.952 37.5 31.808 C38.044 31.663 38.556 31.73 39.033 32.008 L39.617 32.341 L38.95 33.491 L38.367 33.158 C38.211 33.069 38.042 33.05 37.858 33.1 C37.675 33.15 37.539 33.252 37.45 33.408 L37.367 33.541 L38.033 33.925 C38.267 34.058 38.419 34.258 38.492 34.525 C38.564 34.791 38.533 35.041 38.4 35.275 L37.95 36.075 C38.206 36.475 38.397 36.9 38.525 37.35 C38.653 37.8 38.717 38.263 38.717 38.741 C38.717 40.13 38.231 41.311 37.258 42.283 C36.286 43.255 35.106 43.741 33.717 43.741 Z M33.717 42.408 C34.728 42.408 35.592 42.05 36.308 41.333 C37.025 40.616 37.383 39.752 37.383 38.741 C37.383 38.397 37.336 38.058 37.242 37.725 C37.147 37.391 37.006 37.075 36.817 36.775 L36.383 36.091 L37.083 34.891 L35.35 33.891 L34.65 35.091 L33.917 35.091 C32.872 35.091 31.964 35.425 31.192 36.091 C30.419 36.758 30.033 37.63 30.033 38.708 C30.033 39.73 30.392 40.602 31.108 41.325 C31.825 42.047 32.694 42.408 33.717 42.408 Z M41.283 34.408 L41.283 33.075 L43.283 33.075 L43.283 34.408 Z M37.617 30.741 L37.617 28.741 L38.95 28.741 L38.95 30.741 Z M40.867 32.091 L39.933 31.158 L41.35 29.741 L42.283 30.675 Z" />
+    </group>
 </vector>

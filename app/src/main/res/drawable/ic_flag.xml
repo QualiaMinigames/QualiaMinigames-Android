@@ -1,14 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The flag, drawn from Google Fonts Icons' "flag" (24 by 24). The board paints it in the
-  current text colour, so the file carries no colour of its own.
+  The flag the board marks a suspected mine with, taken from the minesweeper mark in
+  `assets/minesweeper.svg`: the same path the home card draws, so the board and the card show
+  one shape rather than two drawings of one.
+
+  The viewport is the flag's own bounds in that drawing, and the group moves the path into it.
+  The board tints the fill to the theme's ink, so the file's own colour is a placeholder.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="#FF000000"
-        android:pathData="M14.4,6L14,4H5v17h2v-7h5.6l0.4,2h7V6z" />
+    android:viewportWidth="11"
+    android:viewportHeight="12.467">
+    <group
+        android:translateX="-50.878"
+        android:translateY="-50.066">
+        <path
+            android:fillColor="#FF000000"
+            android:fillType="evenOdd"
+            android:pathData="M50.878 62.533 L50.878 50.066 L57.478 50.066 L57.771 51.533 L61.878 51.533 L61.878 58.866 L56.744 58.866 L56.451 57.399 L52.344 57.399 L52.344 62.533 Z M57.954 57.399 L60.411 57.399 L60.411 52.999 L56.561 52.999 L56.268 51.533 L52.344 51.533 L52.344 55.933 L57.661 55.933 Z" />
+    </group>
 </vector>

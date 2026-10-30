@@ -173,15 +173,19 @@ fun ZoomableBoard(
 
                         // A long press is the same gesture as a tap until it has lasted long
                         // enough to be one; the time is bounded rather than awaited forever so
-                        // that a drag can still start from the same down.
-                        val longPress =
+                        // that a drag can still start from the same down. The window running
+                        // out is what a long press *is*: the loop below only ever leaves early
+                        // by reporting that the gesture became something else, so a timeout is
+                        // the press taking hold and a value is the gesture being a tap, a drag
+                        // or a pinch after all.
+                        val interrupted =
                             withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                                 while (true) {
                                     val event = awaitPointerEvent(PointerEventPass.Main)
                                     val pressed = event.changes.filter { it.pressed }
                                     if (pressed.isEmpty()) {
                                         released = true
-                                        return@withTimeoutOrNull false
+                                        return@withTimeoutOrNull true
                                     }
                                     pointerCount = pressed.size
                                     if (pointerCount > 1) {
@@ -189,20 +193,21 @@ fun ZoomableBoard(
                                     }
                                     last = event.calculateCentroid(useCurrent = true) ?: last
                                     if (zooming || event.calculateZoom() != 1f) {
-                                        return@withTimeoutOrNull false
+                                        return@withTimeoutOrNull true
                                     }
                                     if ((event.changes.first().position - startedAt).getDistance() >
                                         viewConfiguration.touchSlop
                                     ) {
                                         moved = true
-                                        return@withTimeoutOrNull false
+                                        return@withTimeoutOrNull true
                                     }
                                 }
                                 @Suppress("UNREACHABLE_CODE")
-                                false
+                                true
                             }
+                        val longPress = interrupted == null && !released && !moved && !zooming
 
-                        if (longPress == true) {
+                        if (longPress) {
                             val pressedCell =
                                 cellAt(startedAt, view, boardWidth, boardHeight, currentZoom, currentPan, rows, columns)
                             // A board that says it follows the press itself gets the press and

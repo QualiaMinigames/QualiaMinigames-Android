@@ -137,14 +137,6 @@ fun MinesweeperPlay(
         remember(context) {
             ResourcesCompat.getFont(context, R.font.cascadia_code) ?: Typeface.MONOSPACE
         }
-    // The two marks are vector painters rather than drawables painted into the picture: a
-    // picture records what a drawable looks like at the moment it is recorded, and a
-    // drawable's tint is applied when it draws rather than when the command is recorded, so a
-    // mark whose tint was set after the recording came out in the wrong colour or not at all.
-    // The painters are drawn through the canvas transform in the composition instead, which
-    // also keeps them sharp at any zoom.
-    val flagMark = painterResource(R.drawable.ic_flag)
-    val mineMark = painterResource(R.drawable.ic_bomb)
     var states by remember(board) { mutableStateOf(board.cellsState()) }
     var phase by remember(board) { mutableStateOf(board.phase) }
     var fellBack by remember(board) { mutableStateOf(board.fellBack) }
@@ -227,6 +219,27 @@ fun MinesweeperPlay(
     val height = board.height
 
     Column(modifier = Modifier.fillMaxSize()) {
+        // The outcome is a line above the board rather than a dialog: a player who lost wants
+        // to read the board under it, and a dialog would cover the very thing it is about.
+        val headline =
+            when (board.phase) {
+                MinesweeperPhase.Won -> stringResource(R.string.minesweeper_won)
+                MinesweeperPhase.Lost -> stringResource(R.string.minesweeper_lost)
+                else -> null
+            }
+        if (headline != null) {
+            Text(
+                headline,
+                style = MaterialTheme.typography.titleLarge,
+                color =
+                    if (board.phase == MinesweeperPhase.Lost) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onBackground
+                    },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = Space.l, vertical = Space.s),
+            )
+        }
         if (fellBack) {
             Text(
                 stringResource(R.string.minesweeper_fell_back),
@@ -245,7 +258,7 @@ fun MinesweeperPlay(
         }
         Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(Space.m)) {
             val picture =
-                remember(width, height, states, boardBackground, numberColor, divider, numberTypeface) {
+                remember(width, height, states, boardBackground, numberColor, divider, alert, numberTypeface) {
                     recordBoard(
                         width = width,
                         height = height,
@@ -254,6 +267,7 @@ fun MinesweeperPlay(
                         boardBackground = boardBackground,
                         numberColor = numberColor,
                         divider = divider,
+                        alert = alert,
                         typeface = numberTypeface,
                     )
                 }
@@ -268,14 +282,21 @@ fun MinesweeperPlay(
                     val index = row?.let { it * width + column }
                     if (released) {
                         val wasLong = longPressed
+                        val dragged = distanceDp >= FLAG_DP
                         pressed = null
                         flagAlpha = 0f
                         longPressed = false
                         if (index != null && wasLong) {
-                            if (distanceDp < FLAG_DP) {
+                            // A press that stayed put opens its cell; one that moved marks it.
+                            // The two are the whole difference between opening and flagging,
+                            // and a flag never opens: a cell the player has marked is a cell
+                            // they have told the board is a mine.
+                            if (dragged) {
+                                if (board.toggleFlag(index)) {
+                                    refresh()
+                                }
+                            } else {
                                 open(index)
-                            } else if (board.toggleFlag(index)) {
-                                refresh()
                             }
                         }
                     } else {
@@ -288,30 +309,24 @@ fun MinesweeperPlay(
                     drawIntoCanvas { canvas ->
                         canvas.nativeCanvas.drawPicture(picture)
                     }
-                    // The marks go over the recorded board rather than into it: a flag and a
-                    // mine are vector paintings, and a picture is a recording of draw commands
-                    // that a tint set afterwards cannot reach.
-                    for (index in states.indices) {
-                        when (states[index]) {
-                            MinesweeperCell.FLAGGED ->
-                                drawMark(flagMark, index, width, numberColor, 1f)
-
-                            MinesweeperCell.MINE ->
-                                drawMark(mineMark, index, width, alert, 1f)
-
-                            else -> Unit
-                        }
-                    }
+                    // The press feedback is the only layer above the recorded board: it is the
+                    // cell a finger is on, and it has to cover whatever that cell shows until
+                    // the finger says what it means.
                     val held = pressed
                     if (held != null && held in states.indices) {
-                        drawRect(
-                            color = if (longPressed) CoveredCellLongPressed else CoveredCellPressed,
-                            topLeft = Offset((held % width).toFloat(), (held / width).toFloat()),
-                            size = Size(1f, 1f),
-                        )
                         val state = states[held]
+                        if (state >= MinesweeperCell.COVERED && state != MinesweeperCell.MINE) {
+                            drawRect(
+                                color = if (longPressed) CoveredCellLongPressed else CoveredCellPressed,
+                                topLeft = Offset((held % width).toFloat(), (held / width).toFloat()),
+                                size = Size(1f, 1f),
+                            )
+                        }
+                        // A flag a drag is carrying is drawn at the opacity the drag has
+                        // reached, over the cell it started on: the board shows how far the
+                        // finger has to go before the mark counts.
                         if (longPressed && state == MinesweeperCell.COVERED && flagAlpha > 0f) {
-                            drawMark(flagMark, held, width, numberColor, flagAlpha)
+                            drawDragFlag(held, width, numberColor, flagAlpha)
                         }
                     }
                 },
@@ -322,45 +337,133 @@ fun MinesweeperPlay(
 }
 
 /**
- * Draws one mark in the middle of a cell, in the painter's own vector form.
+ * Draws the flag a drag is carrying, at the opacity the drag has reached.
  *
- * The painter is drawn inside a transform that moves it to its cell and scales it to a
- * fraction of the cell, so one painter serves every cell and stays sharp at any zoom: the
- * mark is a list of vector commands rather than a bitmap of one. [colour] is applied as a
- * tint, which is what lets one file stand for both the ink a flag is drawn in and the warning
- * red a mine is.
+ * It is drawn here rather than recorded into the picture because the opacity changes while the
+ * finger moves, and a picture is recorded once per position: recording a new one per pixel of
+ * travel would undo the reason the board is recorded at all.
  */
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawMark(
-    painter: Painter,
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDragFlag(
     index: Int,
     width: Int,
     colour: Color,
     alpha: Float,
 ) {
-    if (alpha <= 0f) {
-        return
-    }
     val inset = (1f - MARK_SIZE) / 2f
-    withTransform({
-        translate((index % width).toFloat() + inset, (index / width).toFloat() + inset)
-        scale(MARK_SIZE, MARK_SIZE, pivot = Offset.Zero)
-    }) {
-        with(painter) {
-            draw(Size(1f, 1f), alpha = alpha, colorFilter = ColorFilter.tint(colour))
-        }
+    val scale = MARK_SIZE / maxOf(FLAG_BOUNDS.width(), FLAG_BOUNDS.height())
+    drawIntoCanvas { canvas ->
+        val paint =
+            android.graphics.Paint().apply {
+                isAntiAlias = true
+                color = colour.toArgb()
+                this.alpha = (alpha * 255).toInt()
+            }
+        canvas.nativeCanvas.save()
+        canvas.nativeCanvas.translate(index % width + inset, index / width + inset)
+        canvas.nativeCanvas.scale(scale, scale)
+        canvas.nativeCanvas.translate(-FLAG_BOUNDS.left, -FLAG_BOUNDS.top)
+        canvas.nativeCanvas.drawPath(FLAG_GLYPH, paint)
+        canvas.nativeCanvas.restore()
     }
 }
 
 /**
- * Records a board's cells, grid and numbers into one picture, in board units.
+ * Draws one mark in the middle of a cell.
  *
- * The cells are painted in a single pass over two paint colours rather than one paint per cell,
- * and the numbers are set in the duration face: a board of numbers is read by comparing them,
- * and a proportional face makes `1` narrower than `8`.
+ * The glyph's path data is in the same units as the home card's drawing, so the board scales
+ * it by the mark's size over the glyph's own bounds and moves it into the cell. Parsing the
+ * path data once and drawing it as an ordinary path is what lets the mark be recorded into the
+ * board's picture in the colour the board wants, which a tinted drawable could not be.
+ */
+private fun drawGlyph(
+    canvas: android.graphics.Canvas,
+    paint: Paint,
+    glyph: android.graphics.Path,
+    bounds: android.graphics.RectF,
+    index: Int,
+    width: Int,
+) {
+    val inset = (1f - MARK_SIZE) / 2f
+    val scale = MARK_SIZE / maxOf(bounds.width(), bounds.height())
+    canvas.save()
+    canvas.translate(index % width + inset, index / width + inset)
+    canvas.scale(scale, scale)
+    canvas.translate(-bounds.left, -bounds.top)
+    canvas.drawPath(glyph, paint)
+    canvas.restore()
+}
+
+/** The flag's path, in the units of the minesweeper mark the home card draws. */
+private val FLAG_GLYPH: android.graphics.Path = android.graphics.Path().apply {
+    val data =
+        "M50.878 62.533 L50.878 50.066 L57.478 50.066 L57.771 51.533 L61.878 51.533 " +
+            "L61.878 58.866 L56.744 58.866 L56.451 57.399 L52.344 57.399 L52.344 62.533 Z " +
+            "M57.954 57.399 L60.411 57.399 L60.411 52.999 L56.561 52.999 L56.268 51.533 " +
+            "L52.344 51.533 L52.344 55.933 L57.661 55.933 Z"
+    fillFromData(this, data)
+    fillType = android.graphics.Path.FillType.EVEN_ODD
+}
+
+/** The mine's path, in the units of the minesweeper mark the home card draws. */
+private val MINE_GLYPH: android.graphics.Path = android.graphics.Path().apply {
+    val data =
+        "M33.717 43.741 C32.328 43.741 31.147 43.25 30.175 42.266 C29.203 41.283 28.717 40.097 " +
+            "28.717 38.708 C28.717 37.319 29.197 36.144 30.158 35.183 C31.119 34.222 32.294 33.741 " +
+            "33.683 33.741 L33.9 33.741 L34.35 32.958 C34.483 32.713 34.683 32.555 34.95 32.483 " +
+            "C35.217 32.411 35.472 32.447 35.717 32.591 L36.217 32.875 L36.3 32.741 " +
+            "C36.556 32.263 36.956 31.952 37.5 31.808 C38.044 31.663 38.556 31.73 39.033 32.008 " +
+            "L39.617 32.341 L38.95 33.491 L38.367 33.158 C38.211 33.069 38.042 33.05 37.858 33.1 " +
+            "C37.675 33.15 37.539 33.252 37.45 33.408 L37.367 33.541 L38.033 33.925 " +
+            "C38.267 34.058 38.419 34.258 38.492 34.525 C38.564 34.791 38.533 35.041 38.4 35.275 " +
+            "L37.95 36.075 C38.206 36.475 38.397 36.9 38.525 37.35 C38.653 37.8 38.717 38.263 " +
+            "38.717 38.741 C38.717 40.13 38.231 41.311 37.258 42.283 C36.286 43.255 35.106 43.741 " +
+            "33.717 43.741 Z " +
+            "M33.717 42.408 C34.728 42.408 35.592 42.05 36.308 41.333 C37.025 40.616 37.383 39.752 " +
+            "37.383 38.741 C37.383 38.397 37.336 38.058 37.242 37.725 C37.147 37.391 37.006 37.075 " +
+            "36.817 36.775 L36.383 36.091 L37.083 34.891 L35.35 33.891 L34.65 35.091 L33.917 35.091 " +
+            "C32.872 35.091 31.964 35.425 31.192 36.091 C30.419 36.758 30.033 37.63 30.033 38.708 " +
+            "C30.033 39.73 30.392 40.602 31.108 41.325 C31.825 42.047 32.694 42.408 33.717 42.408 Z"
+    fillFromData(this, data)
+    fillType = android.graphics.Path.FillType.EVEN_ODD
+}
+
+/** The bounds of the flag's path, which its mark is scaled to. */
+private val FLAG_BOUNDS = android.graphics.RectF(50.878f, 50.066f, 61.878f, 62.533f)
+
+/** The bounds of the mine's path, which its mark is scaled to. */
+private val MINE_BOUNDS = android.graphics.RectF(28.717f, 28.741f, 43.283f, 43.741f)
+
+/** Fills a path from SVG path data, which `PathParser` reads. */
+private fun fillFromData(path: android.graphics.Path, data: String) {
+    val parsed = androidx.core.graphics.PathParser.createPathFromPathData(data)
+    requireNotNull(parsed) { "the mark's path data did not parse" }
+    path.set(parsed)
+}
+
+/**
+ * Records a board into one picture, in board units.
  *
- * The flags and the mines are not part of the picture: they are vector painters, and a
- * picture records the drawing commands of the moment it is made, which a tint applied later
- * cannot reach. The composition draws them over the recorded board instead.
+ * # The order of the layers
+ *
+ * The cells are laid down first, then the grid over them, then the numbers, then the marks.
+ * The marks have to be last: a covered cell is a filled square, and a flag drawn before it
+ * would be painted over by the very cell it marks. That order is why the marks are recorded
+ * here rather than drawn by the composition afterwards: a picture is one layer, and anything
+ * drawn after it would sit above the press feedback the board puts on top.
+ *
+ * # Why the marks are described here rather than read from a vector file
+ *
+ * A `Picture` records the drawing commands of the moment it is made. A `VectorDrawable`'s tint
+ * is applied when it draws, which is after the recording, so a mark recorded that way came out
+ * in the file's own colour — or, when the viewport disagreed with the path, not at all. The two
+ * marks are therefore built from the same path data the home card reads, as ordinary path
+ * commands in the colour the board wants at the moment it records.
+ *
+ * # The two colours of a revealed mine
+ *
+ * A mine's cell is painted the warning red and the mine itself in the board's own background,
+ * which is how the mark reads as a mine rather than as a red square: the same pair the home
+ * card uses for its red cell.
  */
 @Suppress("LongParameterList")
 private fun recordBoard(
@@ -371,6 +474,7 @@ private fun recordBoard(
     boardBackground: Color,
     numberColor: Color,
     divider: Color,
+    alert: Color,
     typeface: Typeface,
 ): Picture {
     val picture = Picture()
@@ -378,9 +482,24 @@ private fun recordBoard(
     val fill = Paint().apply { isAntiAlias = true; style = Paint.Style.FILL }
 
     canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), fill.apply { color = boardBackground.toArgb() })
+
+    // A mine's cell is the warning red beneath a mark in the board's own colour, and every
+    // other closed cell is the covered blue. The two are one pass with two paints rather than
+    // a pass per cell.
     fill.color = covered.toArgb()
     for (index in states.indices) {
-        if (states[index] >= MinesweeperCell.COVERED && states[index] != MinesweeperCell.MINE) {
+        if (states[index] == MinesweeperCell.MINE) {
+            continue
+        }
+        if (states[index] >= MinesweeperCell.COVERED) {
+            val column = (index % width).toFloat()
+            val row = (index / width).toFloat()
+            canvas.drawRect(column, row, column + 1f, row + 1f, fill)
+        }
+    }
+    fill.color = alert.toArgb()
+    for (index in states.indices) {
+        if (states[index] == MinesweeperCell.MINE) {
             val column = (index % width).toFloat()
             val row = (index / width).toFloat()
             canvas.drawRect(column, row, column + 1f, row + 1f, fill)
@@ -416,6 +535,24 @@ private fun recordBoard(
             // on the middle of its cell whatever the font's metrics are.
             val baseline = row + 0.5f - (number.ascent() + number.descent()) / 2f
             canvas.drawText(state.toString(), column + 0.5f, baseline, number)
+        }
+    }
+
+    // The marks come last, over everything a cell has already drawn.
+    val markPaint = Paint().apply { isAntiAlias = true; style = Paint.Style.FILL }
+    for (index in states.indices) {
+        when (states[index]) {
+            MinesweeperCell.FLAGGED -> {
+                markPaint.color = numberColor.toArgb()
+                drawGlyph(canvas, markPaint, FLAG_GLYPH, FLAG_BOUNDS, index, width)
+            }
+
+            MinesweeperCell.MINE -> {
+                markPaint.color = boardBackground.toArgb()
+                drawGlyph(canvas, markPaint, MINE_GLYPH, MINE_BOUNDS, index, width)
+            }
+
+            else -> Unit
         }
     }
 
