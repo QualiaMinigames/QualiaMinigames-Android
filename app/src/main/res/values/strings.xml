@@ -107,7 +107,7 @@
     <string name="records_clear_selection">Deselect</string>
     <string name="records_export">Export</string>
     <string name="records_delete">Delete</string>
-    <string name="records_delete_confirm">Delete the selected records?</string>
+    <string name="records_delete_confirm">Delete %1$d selected records? This cannot be undone.</string>
     <string name="records_delete_all">Delete all</string>
     <string name="records_delete_all_confirm">Delete every record? This cannot be undone.</string>
     <string name="records_export_done">Saved to %1$s</string>

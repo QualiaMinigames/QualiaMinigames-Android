@@ -46,6 +46,15 @@ sealed interface ShellDialog {
     /** One record, in full. */
     data class RecordDetail(val record: Record) : ShellDialog
 
+    /**
+     * The question that comes before some records are deleted.
+     *
+     * It carries the identifiers the player selected rather than reading them from the page:
+     * a confirmation is a question about a particular set of records, and a set that changed
+     * between the question and the answer would delete something nobody agreed to.
+     */
+    data class DeleteRecords(val ids: Set<String>) : ShellDialog
+
     /** The question that comes before every record is deleted. */
     data object ClearRecords : ShellDialog
 }
@@ -110,6 +119,16 @@ fun ShellDialogContent(
             )
 
         is ShellDialog.RecordDetail -> RecordDetailDialog(record = dialog.record, onDismiss = onDismiss)
+
+        is ShellDialog.DeleteRecords ->
+            DeleteRecordsDialog(
+                count = dialog.ids.size,
+                onConfirm = {
+                    container.scope.launch { container.records.delete(dialog.ids) }
+                    onDismiss()
+                },
+                onDismiss = onDismiss,
+            )
 
         ShellDialog.ClearRecords ->
             ClearRecordsDialog(

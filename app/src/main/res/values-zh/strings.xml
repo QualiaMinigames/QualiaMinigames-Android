@@ -96,7 +96,7 @@
     <string name="records_clear_selection">取消选择</string>
     <string name="records_export">导出</string>
     <string name="records_delete">删除</string>
-    <string name="records_delete_confirm">删除选中的记录？</string>
+    <string name="records_delete_confirm">删除选中的 %1$d 条记录？此操作无法撤销。</string>
     <string name="records_delete_all">清空</string>
     <string name="records_delete_all_confirm">清空全部记录？此操作无法撤销。</string>
     <string name="records_export_done">已保存到 %1$s</string>

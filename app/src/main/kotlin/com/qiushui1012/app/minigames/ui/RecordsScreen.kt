@@ -118,6 +118,18 @@ fun RecordsScreen(
     // the open ones: a new game's group should not appear open only after it has been seen.
     var collapsed by remember { mutableStateOf<Set<GameKind>>(emptySet()) }
 
+    // A selection is about records that exist. When one is deleted — by the confirmation this
+    // page opens, or by anything else — the page drops it from the selection, and a selection
+    // that empties itself leaves the selection mode: a bar over no records is a bar that can
+    // only be dismissed.
+    val present = records.map { it.id() }.toSet()
+    androidx.compose.runtime.LaunchedEffect(present) {
+        selected = selected intersect present
+        if (selected.isEmpty()) {
+            selecting = false
+        }
+    }
+
     val exportedAtLabel = stringResource(R.string.records_exported_at, currentStamp())
     val unknownPlayer = stringResource(R.string.records_unknown_player)
     // The label is the one the list uses, in the language the interface is in. A record's key
@@ -224,13 +236,10 @@ fun RecordsScreen(
                                         }
                                 },
                                 onExport = { export(records.filter { it.id() in selected }) },
-                                onDelete = {
-                                    scope.launch {
-                                        container.records.delete(selected)
-                                        selected = emptySet()
-                                        selecting = false
-                                    }
-                                },
+                                // Deleting asks first, exactly as clearing does: both destroy
+                                // records that no longer exist anywhere else, and a selection
+                                // made with one tap should not be undone with another.
+                                onDelete = { onRequestDialog(ShellDialog.DeleteRecords(selected)) },
                                 onCancel = {
                                     selecting = false
                                     selected = emptySet()
@@ -654,6 +663,28 @@ fun RecordDetailDialog(
                 }
             }
         }
+    }
+}
+
+/**
+ * The dialog that asks before the selected records are deleted.
+ *
+ * [count] is how many are about to go, which the question quotes: "delete 3 records?" is a
+ * question a player can answer, and "delete the selected records?" is one they have to count
+ * for themselves before they dare answer it.
+ */
+@Composable
+fun DeleteRecordsDialog(
+    count: Int,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalForm(
+        title = stringResource(R.string.records_delete),
+        onDismiss = onDismiss,
+        confirm = { ModalConfirm(stringResource(R.string.records_delete), onClick = onConfirm) },
+    ) {
+        Text(stringResource(R.string.records_delete_confirm, count))
     }
 }
 
