@@ -1,4 +1,4 @@
-// Copyright (C) 2026 QualiaMinigames contributors
+﻿// Copyright (C) 2026 QualiaMinigames contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -298,8 +298,8 @@ android {
         applicationId = "com.qiushui1012.app.minigames"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.2.1"
 
         ndk.abiFilters += androidTargets.values
 

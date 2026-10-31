@@ -85,6 +85,19 @@ private const val CELL_LINE = 0.045f
 /** The side of a flag or a mine, as a fraction of a cell. */
 private const val MARK_SIZE = 0.68f
 
+/** The height of a digit, as a fraction of a cell. */
+private const val DIGIT_TEXT_SIZE = 0.62f
+
+/**
+ * The size at which a digit's ink is measured, in board units.
+ *
+ * Text bounds come back in whole pixels, so a glyph measured at the size it is drawn at has its
+ * offset rounded by up to a pixel — and in board units a pixel at that size is most of a cell.
+ * Measuring at a hundred cells and scaling the result down keeps the rounding below what a
+ * screen can show.
+ */
+private const val MEASURING_TEXT_SIZE = 100f
+
 /** The distance at which a long press stops being an opening and becomes a flag, in dp. */
 private const val FLAG_DP = 8f
 
@@ -539,21 +552,39 @@ private fun recordBoard(
     val number = Paint().apply {
         isAntiAlias = true
         this.typeface = typeface
-        textAlign = Paint.Align.CENTER
-        textSize = 0.62f
+        // The pen is placed on the ink rather than on an advance width: a centred pen centres
+        // the advance, and an advance is wider than the glyph it carries on one side or the
+        // other, which is why the digits sat left of the middle of their cells.
+        textAlign = Paint.Align.LEFT
+        textSize = DIGIT_TEXT_SIZE
         isSubpixelText = true
     }
     number.color = numberColor.toArgb()
+    // The ink of each glyph is measured and the glyph is placed so that its own box is centred.
+    // A face reserves room above its capitals for accents and below its baseline for
+    // descenders, and a digit uses neither: centring on ascent and descent left every digit
+    // high in its cell, and centring on the advance left it wide of the middle.
+    //
+    // The measuring is done at a large size and scaled down rather than at the size the digit
+    // is drawn at. Bounds come back in whole pixels of whatever size the paint is set to, and
+    // the drawing size here is a fraction of a board unit — one pixel of it is one whole cell
+    // of the board, so measuring at that size rounded the offset by a third of a cell.
+    val measuring = Paint(number).apply { textSize = MEASURING_TEXT_SIZE }
+    val scale = DIGIT_TEXT_SIZE / MEASURING_TEXT_SIZE
+    val box = android.graphics.Rect()
     for (row in 0 until height) {
         for (column in 0 until width) {
             val state = states.getOrNull(row * width + column) ?: continue
             if (state !in 1..MinesweeperCell.MAX_ADJACENT) {
                 continue
             }
-            // The baseline is placed by the face's own ascent and descent, so the digit sits
-            // on the middle of its cell whatever the font's metrics are.
-            val baseline = row + 0.5f - (number.ascent() + number.descent()) / 2f
-            canvas.drawText(state.toString(), column + 0.5f, baseline, number)
+            val text = state.toString()
+            measuring.getTextBounds(text, 0, text.length, box)
+            val left = column + 0.5f - (box.left + box.right) * scale / 2f
+            // Bounds report ink above the baseline as negative, so the baseline that centres
+            // the ink sits at the middle of the cell plus half the ink.
+            val baseline = row + 0.5f + (box.height() / 2f - box.bottom) * scale
+            canvas.drawText(text, left, baseline, number)
         }
     }
 

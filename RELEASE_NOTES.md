@@ -16,6 +16,13 @@ library.
 
 ## 本次内容 / What is in it
 
+- 扫雷盘面格子内的数字改为按字形自身的墨迹居中。此前横向按字符宽度、纵向按字体行高定位，
+  数字在格子里偏左偏高；本次也修正了在棋盘单位下量字导致的取整误差。
+  Minesweeper digits are now centred on their own ink. They were placed by the advance width
+  and the face's line metrics before, which left them left of centre and high in the cell; the
+  rounding that measuring them in board units introduced is gone as well.
+- 与 0.2.0 相同的功能：
+  Everything else is what 0.2.0 had:
 - 接水管：9～35 格见方，平边与跨边两种布局；点击顺时针、长按逆时针旋转，闭环处管壁转红，水流填充管腔。生成器保证每格最多三臂，不会出现转了也看不出变化的四通管。
   Pipes: 9 to 35 cells a side, flat or wrapped; tap to turn clockwise, long-press anticlockwise. A closed loop turns its walls red, and the water fills the lumen. No cell joins all four sides, so no turn is invisible.
 - 数独：简单、中等、困难三档，笔记模式、行列宫高亮、冲突标红，双指缩放与拖动。
