@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -47,6 +48,7 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.qiushui1012.app.minigames.AlertDark
@@ -67,7 +69,12 @@ import com.qiushui1012.app.minigames.rules.Rules
 import com.qiushui1012.app.minigames.rules.SudokuDifficulty
 
 /** The density a card shows when the settings hold a value the field would have refused. */
-private const val DEFAULT_MINESWEEPER_PERCENT = 123/**
+private const val DEFAULT_MINESWEEPER_PERCENT = 123
+
+/** The island share a card shows when the settings hold a value the field would have refused. */
+private const val DEFAULT_HASHI_PERCENT = 150
+
+/**
  * The narrowest a game card may be drawn before the grid uses fewer columns.
  *
  * A phone held upright is about 400 dp across, and its two cards side by side are about 185 dp
@@ -106,6 +113,7 @@ private val GameIconSize = 140.dp
 fun HomeScreen(
     container: AppContainer,
     settings: Settings,
+    bottomInset: Dp,
     onContinue: (GameInProgress) -> Unit,
     onNewGame: (GameKind) -> Unit,
     onDiscard: (GameKind) -> Unit,
@@ -113,6 +121,8 @@ fun HomeScreen(
     val pipesSave by container.records.save(GameKind.Pipes).collectAsStateWithLifecycle(initialValue = null)
     val sudokuSave by container.records.save(GameKind.Sudoku).collectAsStateWithLifecycle(initialValue = null)
     val minesweeperSave by container.records.save(GameKind.Minesweeper).collectAsStateWithLifecycle(initialValue = null)
+    val nonogramSave by container.records.save(GameKind.Nonogram).collectAsStateWithLifecycle(initialValue = null)
+    val hashiSave by container.records.save(GameKind.Hashi).collectAsStateWithLifecycle(initialValue = null)
 
     // The minesweeper card's summary is read back from the parameters the settings kept, so
     // that the card and the dialog that produced it cannot describe the same game in two
@@ -123,6 +133,17 @@ fun HomeScreen(
     val minesweeperMines =
         if (minesweeperCells > 0) {
             Rules.minesweeperMinesForPerMille(minesweeperCells, minesweeperPercent)
+        } else {
+            0
+        }
+
+    // The hashi card reads its island count from the share the settings kept, for the same
+    // reason: the card and the dialog must not round the same share differently.
+    val hashiPercent = settings.lastHashiPercent.toIntOrNull() ?: DEFAULT_HASHI_PERCENT
+    val hashiPoints = settings.lastHashiWidth * settings.lastHashiHeight
+    val hashiIslands =
+        if (hashiPoints > 0) {
+            Rules.hashiIslandsForPerMille(hashiPoints, hashiPercent)
         } else {
             0
         }
@@ -154,6 +175,25 @@ fun HomeScreen(
                         ),
                     ),
                 save = minesweeperSave,
+            ),
+            GameEntry(
+                kind = GameKind.Nonogram,
+                name = stringResource(R.string.home_nonogram_name),
+                summary = keyLabel(RecordKey.Nonogram(settings.lastNonogramWidth, settings.lastNonogramHeight)),
+                save = nonogramSave,
+            ),
+            GameEntry(
+                kind = GameKind.Hashi,
+                name = stringResource(R.string.home_hashi_name),
+                summary =
+                    keyLabel(
+                        RecordKey.Hashi(
+                            width = settings.lastHashiWidth,
+                            height = settings.lastHashiHeight,
+                            islands = hashiIslands,
+                        ),
+                    ),
+                save = hashiSave,
             ),
         )
 
@@ -190,9 +230,12 @@ fun HomeScreen(
                         }
                     }
                 }
-                // The navigation floats over the narrow layout and this page has no inset to
-                // leave for it: two cards are short enough that the island covers nothing.
-                Box(modifier = Modifier.padding(bottom = Space.xl))
+                // The navigation island floats over this page, so the content has to end above it
+                // rather than behind it: the last row of cards stops `bottomInset` above the
+                // page's bottom edge, which is where the island begins. Content further up
+                // still passes under the island while the page is being scrolled, which is what
+                // makes the page read as a scrolling surface rather than as a cut-off one.
+                Box(modifier = Modifier.height(bottomInset))
             }
         }
     }
@@ -382,6 +425,16 @@ fun restoreGame(save: SavedGame): GameInProgress? =
         GameKind.Minesweeper ->
             Rules.minesweeperFromSnapshot(save.snapshot)?.let { board ->
                 GameInProgress.Minesweeper(board, save.playerName, save.seconds)
+            }
+
+        GameKind.Nonogram ->
+            Rules.nonogramFromSnapshot(save.snapshot)?.let { board ->
+                GameInProgress.Nonogram(board, save.playerName, save.seconds)
+            }
+
+        GameKind.Hashi ->
+            Rules.hashiFromSnapshot(save.snapshot)?.let { board ->
+                GameInProgress.Hashi(board, save.playerName, save.seconds)
             }
     }
 

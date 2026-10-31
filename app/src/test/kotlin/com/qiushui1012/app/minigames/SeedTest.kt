@@ -110,8 +110,8 @@ class MinesweeperParamsTest {
 
     @Test
     fun the_field_reads_a_count_and_a_share_apart() {
-        assertEquals(MinesInput.Count(10), parseMinesInput("10"))
-        assertEquals(MinesInput.Percent(123), parseMinesInput("12.3%"))
+        assertEquals(CountOrPercent.Count(10), parseMinesInput("10"))
+        assertEquals(CountOrPercent.Percent(123), parseMinesInput("12.3%"))
         assertNull(parseMinesInput(""))
         assertNull(parseMinesInput("abc"))
     }

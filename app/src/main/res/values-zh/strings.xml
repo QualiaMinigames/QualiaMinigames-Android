@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!--
   The Chinese translation. The key set must match `values/strings.xml` exactly, which a test
   checks: a key added to one file and forgotten in the other would fall back silently, and
@@ -68,6 +68,29 @@
     <string name="minesweeper_mines_counter">剩余 %1$d / %2$d</string>
     <string name="minesweeper_lost">恭喜你，踩雷了！</string>
     <string name="minesweeper_won">恭喜你，通关了！</string>
+
+    <string name="home_nonogram_name">数织</string>
+    <string name="home_nonogram_summary">%1$d×%2$d</string>
+    <string name="nonogram_width_range">宽度（4~64）</string>
+    <string name="nonogram_height_range">高度（4~64）</string>
+    <string name="nonogram_slider_ticks">滑块范围 4~35</string>
+    <string name="nonogram_generating">正在生成盘面</string>
+    <string name="nonogram_generate_failed">无法生成此盘面，请换一个种子或减小尺寸</string>
+    <string name="nonogram_fell_back">未找到唯一解盘面，本题可能存在多个答案</string>
+    <string name="nonogram_won">已完成</string>
+    <string name="cd_nonogram_board">数织棋盘</string>
+
+    <string name="home_hashi_name">数桥</string>
+    <string name="home_hashi_summary">%1$d×%2$d，%3$d 座岛</string>
+    <string name="hashi_width_range">宽度（4~35 个格点）</string>
+    <string name="hashi_height_range">高度（4~35 个格点）</string>
+    <string name="hashi_islands">岛数</string>
+    <string name="hashi_islands_helper_percent">占格点 %1$s</string>
+    <string name="hashi_islands_helper_count">%1$d 座</string>
+    <string name="hashi_slider_ticks">滑块按 5 个百分点吸附</string>
+    <string name="hashi_generate_failed">无法生成此盘面，请换一个种子或少放几座岛</string>
+    <string name="hashi_won">已完成</string>
+    <string name="cd_hashi_board">数桥棋盘</string>
 
     <string name="play_undo">撤销</string>
     <string name="play_back">返回</string>

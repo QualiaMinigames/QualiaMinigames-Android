@@ -111,6 +111,12 @@ fun GameScreen(
 
                 is GameInProgress.Minesweeper ->
                     SavedGame(GameKind.Minesweeper, game.board.toSnapshot(), game.playerName, elapsed, System.currentTimeMillis())
+
+                is GameInProgress.Nonogram ->
+                    SavedGame(GameKind.Nonogram, game.board.toSnapshot(), game.playerName, elapsed, System.currentTimeMillis())
+
+                is GameInProgress.Hashi ->
+                    SavedGame(GameKind.Hashi, game.board.toSnapshot(), game.playerName, elapsed, System.currentTimeMillis())
             }
         // A save the player made by leaving must outlive the screen, for the same reason the
         // record does.
@@ -171,6 +177,10 @@ fun GameScreen(
                     // Minesweeper has no undo: a flag is cheap to take back and an opening is
                     // a decision, so the header draws no undo button for it at all.
                     is GameInProgress.Minesweeper -> Unit
+                    // A nonogram cell toggles back where it was and a hashi bridge cycles
+                    // through zero, so neither needs an undo step.
+                    is GameInProgress.Nonogram -> Unit
+                    is GameInProgress.Hashi -> Unit
                 }
             },
             onBack = {
@@ -205,6 +215,20 @@ fun GameScreen(
                     // The board stays on screen with its mines shown: the player leaves by
                     // pressing back, which is the one way out of a board that has ended.
                     onLost = { finish(failed = true, navigate = false) },
+                )
+
+            is GameInProgress.Nonogram ->
+                NonogramPlay(
+                    board = game.board,
+                    settings = settings,
+                    onSolved = ::finish,
+                )
+
+            is GameInProgress.Hashi ->
+                HashiPlay(
+                    board = game.board,
+                    settings = settings,
+                    onSolved = ::finish,
                 )
         }
     }
@@ -274,8 +298,11 @@ private fun GameHeader(
         Text(formatDuration(elapsed), style = MaterialTheme.typography.titleMedium, fontFamily = DurationFont)
         when (game) {
             // Minesweeper has no undo, so the header offers none: a button that did nothing
-            // would be a control the player would press and then wonder about.
+            // would be a control the player would press and then wonder about. Nonogram and
+            // hashi are the same: every tap undoes itself where it stands.
             is GameInProgress.Minesweeper -> Unit
+            is GameInProgress.Nonogram -> Unit
+            is GameInProgress.Hashi -> Unit
             else -> TextButton(onClick = onUndo) { Text(stringResource(R.string.play_undo)) }
         }
     }

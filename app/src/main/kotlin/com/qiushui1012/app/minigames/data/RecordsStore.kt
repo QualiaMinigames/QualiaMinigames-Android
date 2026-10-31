@@ -105,6 +105,8 @@ class RecordsStore(private val store: DataStore<RecordsFile>) {
                 is RecordKey.Pipes -> GameKind.Pipes
                 is RecordKey.Sudoku -> GameKind.Sudoku
                 is RecordKey.Minesweeper -> GameKind.Minesweeper
+                is RecordKey.Nonogram -> GameKind.Nonogram
+                is RecordKey.Hashi -> GameKind.Hashi
             }
         store.updateData { file ->
             file.copy(

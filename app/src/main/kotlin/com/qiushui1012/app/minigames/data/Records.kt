@@ -59,6 +59,36 @@ sealed interface RecordKey {
         /** Whether the board was generated under the no-guess rules. */
         val noGuess: Boolean,
     ) : RecordKey
+
+    /**
+     * A nonogram game, identified by its board.
+     *
+     * A clue that fits a board of one shape does not fit another, so the two sides together
+     * are what makes two games comparable.
+     */
+    @Serializable
+    data class Nonogram(
+        /** The number of cells across. */
+        val width: Int,
+        /** The number of cells down. */
+        val height: Int,
+    ) : RecordKey
+
+    /**
+     * A hashi game, identified by its board and its island count.
+     *
+     * A board with more islands is a harder board on the same grid, so all three take part in
+     * the comparison for the same reason minesweeper's mine count does.
+     */
+    @Serializable
+    data class Hashi(
+        /** The number of points across. */
+        val width: Int,
+        /** The number of points down. */
+        val height: Int,
+        /** How many islands the board holds. */
+        val islands: Int,
+    ) : RecordKey
 }
 
 /** One finished game. */
@@ -151,7 +181,7 @@ data class SavedGame(
     }
 }
 
-/** Which of the three games a saved game belongs to. */
+/** Which game a saved game belongs to. */
 enum class GameKind {
     /** Pipes. */
     Pipes,
@@ -161,4 +191,10 @@ enum class GameKind {
 
     /** Minesweeper. */
     Minesweeper,
+
+    /** Nonogram. */
+    Nonogram,
+
+    /** Hashi. */
+    Hashi,
 }

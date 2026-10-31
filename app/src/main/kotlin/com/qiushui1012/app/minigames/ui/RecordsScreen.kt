@@ -703,9 +703,9 @@ fun ClearRecordsDialog(
     }
 }
 
-/** Groups records by the game they belong to, pipes first. */
+/** Groups records by the game they belong to, in the order the home page shows the games. */
 fun recordsByKind(records: List<Record>): List<Pair<GameKind, List<Record>>> =
-    listOf(GameKind.Pipes, GameKind.Sudoku, GameKind.Minesweeper).mapNotNull { kind ->
+    GameKind.entries.mapNotNull { kind ->
         val ofKind = records.filter { kindOf(it.key) == kind }
         if (ofKind.isEmpty()) null else kind to ofKind
     }
@@ -716,6 +716,8 @@ fun kindOf(key: RecordKey): GameKind =
         is RecordKey.Pipes -> GameKind.Pipes
         is RecordKey.Sudoku -> GameKind.Sudoku
         is RecordKey.Minesweeper -> GameKind.Minesweeper
+        is RecordKey.Nonogram -> GameKind.Nonogram
+        is RecordKey.Hashi -> GameKind.Hashi
     }
 
 /** Groups records by the parameters they were played with, in a stable order. */
@@ -736,6 +738,13 @@ fun groupRecords(records: List<Record>): List<Pair<RecordKey, List<Record>>> =
                 { (key, _) -> if (key is RecordKey.Minesweeper) key.height else 0 },
                 { (key, _) -> if (key is RecordKey.Minesweeper) key.mines else 0 },
                 { (key, _) -> if (key is RecordKey.Minesweeper && key.noGuess) 1 else 0 },
+                // A nonogram group is filed by its two sides, and a hashi group by its sides
+                // and its island count, which is what tells two boards of one grid apart.
+                { (key, _) -> if (key is RecordKey.Nonogram) key.width else 0 },
+                { (key, _) -> if (key is RecordKey.Nonogram) key.height else 0 },
+                { (key, _) -> if (key is RecordKey.Hashi) key.width else 0 },
+                { (key, _) -> if (key is RecordKey.Hashi) key.height else 0 },
+                { (key, _) -> if (key is RecordKey.Hashi) key.islands else 0 },
             ),
         )
 
@@ -745,6 +754,8 @@ private fun kindOrder(kind: GameKind): Int =
         GameKind.Pipes -> 0
         GameKind.Sudoku -> 1
         GameKind.Minesweeper -> 2
+        GameKind.Nonogram -> 3
+        GameKind.Hashi -> 4
     }
 
 /** Returns the label of a game, which is its name in the interface's language. */
@@ -755,6 +766,8 @@ fun gameKindLabel(kind: GameKind): String =
             GameKind.Pipes -> R.string.home_pipes_name
             GameKind.Sudoku -> R.string.home_sudoku_name
             GameKind.Minesweeper -> R.string.home_minesweeper_name
+            GameKind.Nonogram -> R.string.home_nonogram_name
+            GameKind.Hashi -> R.string.home_hashi_name
         },
     )
 
@@ -788,6 +801,11 @@ fun keyLabel(key: RecordKey): String =
                     if (key.noGuess) R.string.minesweeper_mode_no_guess else R.string.minesweeper_mode_normal,
                 ),
             )
+
+        is RecordKey.Nonogram -> stringResource(R.string.home_nonogram_summary, key.width, key.height)
+
+        is RecordKey.Hashi ->
+            stringResource(R.string.home_hashi_summary, key.width, key.height, key.islands)
     }
 
 /** Returns a duration as `m:ss`, or `h:mm:ss` past an hour. */

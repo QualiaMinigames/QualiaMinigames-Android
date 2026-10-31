@@ -93,6 +93,24 @@ fun ZoomableBoard(
     /** Draws the board, given the scale to draw it at. */
     content: DrawScope.(scale: Float) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * The width of one cell in board units.
+     *
+     * A board whose playfield is inset from its own edge, which is what a nonogram's clue
+     * margins are, states a cell width smaller than `boardWidth / columns` together with a
+     * centre offset below. Defaulting to the whole board keeps the boards that fill it
+     * unchanged.
+     */
+    cellWidth: Float = boardWidth / columns.coerceAtLeast(1),
+    /** The height of one cell in board units. */
+    cellHeight: Float = boardHeight / rows.coerceAtLeast(1),
+    /**
+     * The board unit the centre of the first cell falls on.
+     *
+     * A tap is mapped to a cell through this point rather than through the board's origin, so
+     * a board with a clue margin reports the cell the finger is actually on.
+     */
+    cellOrigin: Offset = Offset.Zero,
     /** Called with the cell under a tap. */
     onTap: (row: Int, column: Int) -> Unit = { _, _ -> },
     /**
@@ -112,6 +130,14 @@ fun ZoomableBoard(
      * read it as either would act twice on one gesture.
      */
     onPressChanged: ((row: Int?, column: Int, distanceDp: Float, released: Boolean) -> Unit)? = null,
+    /**
+     * Called with the board position under a press while it moves.
+     *
+     * The position is in board units, so a board that has to know which direction a drag went
+     * reads it in the units its own geometry is written in rather than in pixels, which is
+     * what makes the threshold independent of the zoom.
+     */
+    onDragPosition: ((x: Float, y: Float) -> Unit)? = null,
 ) {
     val density = LocalDensity.current
     // Read outside the canvas: a DrawScope is not a composable scope, so a theme value has to
@@ -128,6 +154,7 @@ fun ZoomableBoard(
     val tapHandler by rememberUpdatedState(onTap)
     val pressHandler by rememberUpdatedState(onLongPress)
     val pressChanged by rememberUpdatedState(onPressChanged)
+    val dragPosition by rememberUpdatedState(onDragPosition)
     val densityValue = density.density
 
     val fit =
@@ -154,7 +181,7 @@ fun ZoomableBoard(
                 .fillMaxSize()
                 // The size of the box is what drawing and hit testing both measure against.
                 .onSizeChanged { view = it }
-                .pointerInput(boardWidth, boardHeight, rows, columns, pressChanged != null) {
+                .pointerInput(boardWidth, boardHeight, rows, columns, cellWidth, cellHeight, cellOrigin, pressChanged != null, onDragPosition != null) {
                     // A press is held long enough to be deliberate and no longer. The platform's
                     // own timeout is a third longer than a board wants: on a grid a player
                     // presses and moves on within a second, and waiting out the system figure
@@ -214,7 +241,7 @@ fun ZoomableBoard(
 
                         if (longPress) {
                             val pressedCell =
-                                cellAt(startedAt, view, boardWidth, boardHeight, currentZoom, currentPan, rows, columns)
+                                cellAt(startedAt, view, boardWidth, boardHeight, currentZoom, currentPan, rows, columns, cellWidth, cellHeight, cellOrigin)
                             // A board that says it follows the press itself gets the press and
                             // the drag that may follow it; one that does not gets a single
                             // long-press report, which is what the pipes and sudoku boards use.
@@ -238,6 +265,10 @@ fun ZoomableBoard(
                                         (lastPosition - startedAt).getDistance() / densityValue,
                                         true,
                                     )
+                                    dragPosition?.let { report ->
+                                        boardPosition(lastPosition, view, boardWidth, boardHeight, currentZoom, currentPan)
+                                            ?.let { (x, y) -> report(x, y) }
+                                    }
                                     break
                                 }
                                 lastPosition = event.calculateCentroid(useCurrent = true) ?: lastPosition
@@ -247,6 +278,10 @@ fun ZoomableBoard(
                                     (lastPosition - startedAt).getDistance() / densityValue,
                                     false,
                                 )
+                                dragPosition?.let { report ->
+                                    boardPosition(lastPosition, view, boardWidth, boardHeight, currentZoom, currentPan)
+                                        ?.let { (x, y) -> report(x, y) }
+                                }
                                 event.changes.forEach { it.consume() }
                             }
                             return@awaitEachGesture
@@ -295,7 +330,7 @@ fun ZoomableBoard(
                         }
 
                         if (!moved && pointerCount == 1) {
-                            cellAt(startedAt, view, boardWidth, boardHeight, currentZoom, currentPan, rows, columns)
+                            cellAt(startedAt, view, boardWidth, boardHeight, currentZoom, currentPan, rows, columns, cellWidth, cellHeight, cellOrigin)
                                 ?.let { (row, column) -> tapHandler(row, column) }
                         }
                     }
@@ -417,7 +452,44 @@ private fun cellAt(
     pan: Offset,
     rows: Int,
     columns: Int,
+    cellWidth: Float,
+    cellHeight: Float,
+    cellOrigin: Offset,
 ): Pair<Int, Int>? {
+    if (view.width == 0 || boardWidth == 0f || cellWidth <= 0f || cellHeight <= 0f) {
+        return null
+    }
+    val fit = min(view.width / boardWidth, view.height / boardHeight)
+    val scale = fit * zoom
+    val originX = (view.width - boardWidth * scale) / 2f + pan.x
+    val originY = (view.height - boardHeight * scale) / 2f + pan.y
+    // The first cell's centre is at `cellOrigin`, so its leading edge is half a cell before it.
+    // A board whose playfield is inset from its own edge gives an origin past that edge, which
+    // is what keeps a tap in the clue margin from being read as a cell.
+    val left = cellOrigin.x - cellWidth / 2f
+    val top = cellOrigin.y - cellHeight / 2f
+    val column = ((position.x - originX) / scale - left).div(cellWidth).toInt()
+    val row = ((position.y - originY) / scale - top).div(cellHeight).toInt()
+    val withinColumn = (position.x - originX) / scale - left - column * cellWidth
+    val withinRow = (position.y - originY) / scale - top - row * cellHeight
+    if (column !in 0 until columns || row !in 0 until rows) {
+        return null
+    }
+    if (withinColumn !in 0f..cellWidth || withinRow !in 0f..cellHeight) {
+        return null
+    }
+    return row to column
+}
+
+/** Returns the board position of a point, or null when it falls off the board. */
+private fun boardPosition(
+    position: Offset,
+    view: IntSize,
+    boardWidth: Float,
+    boardHeight: Float,
+    zoom: Float,
+    pan: Offset,
+): Pair<Float, Float>? {
     if (view.width == 0 || boardWidth == 0f) {
         return null
     }
@@ -425,12 +497,10 @@ private fun cellAt(
     val scale = fit * zoom
     val originX = (view.width - boardWidth * scale) / 2f + pan.x
     val originY = (view.height - boardHeight * scale) / 2f + pan.y
-    val cellWidth = boardWidth * scale / columns
-    val cellHeight = boardHeight * scale / rows
-    val column = ((position.x - originX) / cellWidth).toInt()
-    val row = ((position.y - originY) / cellHeight).toInt()
-    if (column !in 0 until columns || row !in 0 until rows) {
+    val x = (position.x - originX) / scale
+    val y = (position.y - originY) / scale
+    if (x !in 0f..boardWidth || y !in 0f..boardHeight) {
         return null
     }
-    return row to column
+    return x to y
 }

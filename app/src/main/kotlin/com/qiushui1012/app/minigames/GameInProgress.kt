@@ -16,9 +16,11 @@ package com.qiushui1012.app.minigames
 
 import com.qiushui1012.app.minigames.data.GameKind
 import com.qiushui1012.app.minigames.data.RecordKey
+import com.qiushui1012.app.minigames.rules.HashiBoard
 import com.qiushui1012.app.minigames.rules.MinesweeperBoard
 import com.qiushui1012.app.minigames.rules.MinesweeperMode
 import com.qiushui1012.app.minigames.rules.MinesweeperPhase
+import com.qiushui1012.app.minigames.rules.NonogramBoard
 import com.qiushui1012.app.minigames.rules.PipesBoard
 import com.qiushui1012.app.minigames.rules.PipesLayout
 import com.qiushui1012.app.minigames.rules.SudokuBoard
@@ -121,6 +123,37 @@ sealed interface GameInProgress {
         // starts with that opening rather than with the screen: a player who is still reading
         // the board is not being timed.
         override val waitsForFirstMove: Boolean get() = board.phase == MinesweeperPhase.Pending
+    }
+
+    /** A nonogram game. */
+    data class Nonogram(
+        /** The board. */
+        val board: NonogramBoard,
+        override val playerName: String,
+        override val elapsedSeconds: Long,
+        override val typedSeed: Boolean = false,
+    ) : GameInProgress {
+        override val kind: GameKind = GameKind.Nonogram
+
+        override val key: RecordKey = RecordKey.Nonogram(board.width, board.height)
+
+        override val seed: Long get() = board.seed
+    }
+
+    /** A hashi game. */
+    data class Hashi(
+        /** The board. */
+        val board: HashiBoard,
+        override val playerName: String,
+        override val elapsedSeconds: Long,
+        override val typedSeed: Boolean = false,
+    ) : GameInProgress {
+        override val kind: GameKind = GameKind.Hashi
+
+        override val key: RecordKey =
+            RecordKey.Hashi(board.width, board.height, board.islandCount)
+
+        override val seed: Long get() = board.seed
     }
 }
 

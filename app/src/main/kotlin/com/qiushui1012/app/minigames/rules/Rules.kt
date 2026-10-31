@@ -14,16 +14,27 @@
 
 package com.qiushui1012.app.minigames.rules
 
+import com.qiushui1012.app.minigames.ffi.BridgeInfo as FfiBridgeInfo
+import com.qiushui1012.app.minigames.ffi.ClueLine as FfiClueLine
+import com.qiushui1012.app.minigames.ffi.HashiGame as FfiHashiGame
+import com.qiushui1012.app.minigames.ffi.IslandInfo as FfiIslandInfo
 import com.qiushui1012.app.minigames.ffi.MinesweeperEvent as FfiMinesweeperEvent
 import com.qiushui1012.app.minigames.ffi.MinesweeperGame as FfiMinesweeperGame
 import com.qiushui1012.app.minigames.ffi.MinesweeperMode as FfiMinesweeperMode
 import com.qiushui1012.app.minigames.ffi.MinesweeperPhase as FfiMinesweeperPhase
+import com.qiushui1012.app.minigames.ffi.NonogramGame as FfiNonogramGame
 import com.qiushui1012.app.minigames.ffi.PipesGame as FfiPipesGame
 import com.qiushui1012.app.minigames.ffi.PipesLayout as FfiPipesLayout
 import com.qiushui1012.app.minigames.ffi.SudokuDifficulty as FfiSudokuDifficulty
 import com.qiushui1012.app.minigames.ffi.SudokuGame as FfiSudokuGame
 import com.qiushui1012.app.minigames.ffi.dailySeed as ffiDailySeed
 import com.qiushui1012.app.minigames.ffi.coreVersion as ffiCoreVersion
+import com.qiushui1012.app.minigames.ffi.hashiIslandPerMilleMax as ffiHashiIslandPerMilleMax
+import com.qiushui1012.app.minigames.ffi.hashiIslandPerMilleMin as ffiHashiIslandPerMilleMin
+import com.qiushui1012.app.minigames.ffi.hashiIslandSnapPerMille as ffiHashiIslandSnapPerMille
+import com.qiushui1012.app.minigames.ffi.hashiIslandsForPerMille as ffiHashiIslandsForPerMille
+import com.qiushui1012.app.minigames.ffi.hashiMaxPoints as ffiHashiMaxPoints
+import com.qiushui1012.app.minigames.ffi.hashiMinPoints as ffiHashiMinPoints
 import com.qiushui1012.app.minigames.ffi.minesweeperInputPerMilleMax as ffiMinesweeperInputPerMilleMax
 import com.qiushui1012.app.minigames.ffi.minesweeperInputPerMilleMin as ffiMinesweeperInputPerMilleMin
 import com.qiushui1012.app.minigames.ffi.minesweeperMaxSize as ffiMinesweeperMaxSize
@@ -35,6 +46,8 @@ import com.qiushui1012.app.minigames.ffi.minesweeperNoguessWarnPerMille as ffiMi
 import com.qiushui1012.app.minigames.ffi.minesweeperSliderPerMilleMax as ffiMinesweeperSliderPerMilleMax
 import com.qiushui1012.app.minigames.ffi.minesweeperSliderPerMilleMin as ffiMinesweeperSliderPerMilleMin
 import com.qiushui1012.app.minigames.ffi.minesweeperSnapPerMille as ffiMinesweeperSnapPerMille
+import com.qiushui1012.app.minigames.ffi.nonogramMaxSize as ffiNonogramMaxSize
+import com.qiushui1012.app.minigames.ffi.nonogramMinSize as ffiNonogramMinSize
 import com.qiushui1012.app.minigames.ffi.pipesMaxSize as ffiPipesMaxSize
 import com.qiushui1012.app.minigames.ffi.pipesMinSize as ffiPipesMinSize
 import com.qiushui1012.app.minigames.ffi.seedFromText as ffiSeedFromText
@@ -297,6 +310,151 @@ object MinesweeperCell {
     const val MINE: Int = 11
 }
 
+/** The values a nonogram cell takes, as the rules report them. */
+object NonogramCell {
+    /** A cell the player has left alone. */
+    const val EMPTY: Int = 0
+
+    /** A cell the player filled. */
+    const val FILLED: Int = 1
+
+    /** A cell the player marked as staying empty. */
+    const val MARKED: Int = 2
+}
+
+/** One line's clue, as a nonogram reads it. */
+data class ClueLine(
+    /** The run lengths of the filled cells, in the order they appear along the line. */
+    val values: List<Int>,
+)
+
+/** One island of a hashi board. */
+data class HashiIsland(
+    /** The row the island stands in. */
+    val row: Int,
+
+    /** The column the island stands in. */
+    val column: Int,
+
+    /** The number of bridges the island has to end up with. */
+    val clue: Int,
+
+    /** The number of bridges the island has now. */
+    val degree: Int,
+
+    /** Whether the player marked the island as solved. */
+    val marked: Boolean,
+)
+
+/** One pair of joined islands of a hashi board. */
+data class HashiBridge(
+    /** The smaller island index. */
+    val a: Int,
+
+    /** The larger island index. */
+    val b: Int,
+
+    /** How many bridges join them, one or two. */
+    val count: Int,
+)
+
+/** One game of nonogram. */
+interface NonogramBoard {
+    /** The number of cells across. */
+    val width: Int
+
+    /** The number of cells down. */
+    val height: Int
+
+    /** The number of cells on the board. */
+    val cellCount: Int
+
+    /** The seed the board was drawn from. */
+    val seed: Long
+
+    /** Whether no unique board was found and an ambiguous one is being played. */
+    val fellBack: Boolean
+
+    /** Returns the clue of each row, top to bottom. */
+    fun rowClues(): List<ClueLine>
+
+    /** Returns the clue of each column, left to right. */
+    fun columnClues(): List<ClueLine>
+
+    /**
+     * Returns every cell's state at once, in row-major order.
+     *
+     * The values are [NonogramCell.EMPTY], [NonogramCell.FILLED] and [NonogramCell.MARKED].
+     * A board of 64 by 64 cells is 4096 crossings of the language boundary if it is read one
+     * cell at a time, which costs more than the drawing it feeds.
+     */
+    fun cellsState(): List<Int>
+
+    /** Returns the rows whose clues the player's cells can no longer match. */
+    fun brokenRows(): List<Int>
+
+    /** Returns the columns whose clues the player's cells can no longer match. */
+    fun brokenColumns(): List<Int>
+
+    /** Turns a cell filled, or back to empty, reporting whether it changed. */
+    fun toggleFilled(index: Int): Boolean
+
+    /** Turns a cell marked, or back to empty, reporting whether it changed. */
+    fun toggleMarked(index: Int): Boolean
+
+    /** Returns whether every row and column runs exactly as its clue says. */
+    fun isSolved(): Boolean
+
+    /** Writes the game, so it can be saved. */
+    fun toSnapshot(): ByteArray
+}
+
+/** One game of hashi. */
+interface HashiBoard {
+    /** The number of points across. */
+    val width: Int
+
+    /** The number of points down. */
+    val height: Int
+
+    /** How many islands the board holds. */
+    val islandCount: Int
+
+    /** The seed the board was generated from. */
+    val seed: Long
+
+    /** Returns every island, in ascending point order. */
+    fun islands(): List<HashiIsland>
+
+    /**
+     * Returns every pair of islands that has a bridge, in ascending pair order.
+     *
+     * The order is fixed, so a screen can redraw from one call without comparing it against
+     * the previous frame.
+     */
+    fun bridges(): List<HashiBridge>
+
+    /** Cycles the bridges between two islands, reporting whether the board changed. */
+    fun connect(first: Int, second: Int): Boolean
+
+    /** Turns the player's solved mark on an island off or on, reporting whether it changed. */
+    fun toggleMark(index: Int): Boolean
+
+    /**
+     * Returns the islands that can no longer reach their clue.
+     *
+     * The screen paints these red. An island is stranded when it carries more bridges than its
+     * clue, or when the bridges it still needs cannot all be laid in the directions it has left.
+     */
+    fun strandedIslands(): List<Int>
+
+    /** Returns whether every island carries its clue and the bridges join them all. */
+    fun isSolved(): Boolean
+
+    /** Writes the game, so it can be saved. */
+    fun toSnapshot(): ByteArray
+}
+
 /**
  * The rules the application plays by.
  *
@@ -465,6 +623,74 @@ object Rules {
     fun minesweeperFromSnapshot(bytes: ByteArray): MinesweeperBoard? =
         try {
             FfiMinesweeperGame.fromSnapshot(bytes).let(::Minesweeper)
+        } catch (_: Exception) {
+            null
+        }
+
+    /** Returns the smallest nonogram board, in cells on a side. */
+    fun nonogramMinSize(): Int = ffiNonogramMinSize().toInt()
+
+    /** Returns the largest nonogram board, in cells on a side. */
+    fun nonogramMaxSize(): Int = ffiNonogramMaxSize().toInt()
+
+    /**
+     * Draws a nonogram board and checks that exactly one answer matches its clues.
+     *
+     * Returns null when the parameters are outside their range, which the dialog validates
+     * before it calls this, or when the board could not be drawn at all.
+     */
+    fun newNonogram(width: Int, height: Int, seed: Long): NonogramBoard? =
+        try {
+            FfiNonogramGame(width.toUInt(), height.toUInt(), seed.toULong()).let(::Nonogram)
+        } catch (_: Exception) {
+            null
+        }
+
+    /** Reads a saved nonogram game, or returns null when the bytes are not one. */
+    fun nonogramFromSnapshot(bytes: ByteArray): NonogramBoard? =
+        try {
+            FfiNonogramGame.fromSnapshot(bytes).let(::Nonogram)
+        } catch (_: Exception) {
+            null
+        }
+
+    /** Returns the smallest hashi board, in points on a side. */
+    fun hashiMinPoints(): Int = ffiHashiMinPoints().toInt()
+
+    /** Returns the largest hashi board, in points on a side. */
+    fun hashiMaxPoints(): Int = ffiHashiMaxPoints().toInt()
+
+    /** Returns the lowest share of a hashi board that may hold islands, in thousandths. */
+    fun hashiIslandPerMilleMin(): Int = ffiHashiIslandPerMilleMin().toInt()
+
+    /** Returns the highest share of a hashi board that may hold islands, in thousandths. */
+    fun hashiIslandPerMilleMax(): Int = ffiHashiIslandPerMilleMax().toInt()
+
+    /** Returns the shares a hashi island slider snaps to, in thousandths, ascending. */
+    fun hashiIslandSnapPerMille(): List<Int> = ffiHashiIslandSnapPerMille().map { it.toInt() }
+
+    /** Returns how many islands a share of a board's points converts to. */
+    fun hashiIslandsForPerMille(points: Int, perMille: Int): Int =
+        ffiHashiIslandsForPerMille(points.toUInt(), perMille.toUInt()).toInt()
+
+    /**
+     * Generates a hashi board, or returns null when the parameters leave none.
+     *
+     * A board whose island count leaves no room for a spanning tree cannot be played at all,
+     * so the dialog keeps its form open rather than entering a game that cannot be finished.
+     */
+    fun newHashi(width: Int, height: Int, islands: Int, seed: Long): HashiBoard? =
+        try {
+            FfiHashiGame(width.toUInt(), height.toUInt(), islands.toUInt(), seed.toULong())
+                .let(::Hashi)
+        } catch (_: Exception) {
+            null
+        }
+
+    /** Reads a saved hashi game, or returns null when the bytes are not one. */
+    fun hashiFromSnapshot(bytes: ByteArray): HashiBoard? =
+        try {
+            FfiHashiGame.fromSnapshot(bytes).let(::Hashi)
         } catch (_: Exception) {
             null
         }
@@ -648,6 +874,91 @@ private class Minesweeper(private val game: FfiMinesweeperGame) : MinesweeperBoa
     override fun reveal(index: Int): MinesweeperEvent = game.reveal(index.toUInt()).toModel()
 
     override fun toggleFlag(index: Int): Boolean = game.toggleFlag(index.toUInt())
+
+    override fun toSnapshot(): ByteArray = game.toSnapshot()
+}
+
+/**
+ * Wraps the generated nonogram object.
+ *
+ * The values that change while a game is played are read from the rules on every access
+ * rather than kept as properties, for the reason given on [Minesweeper]: a captured value
+ * would be the board as it stood before the player's first tap.
+ */
+private class Nonogram(private val game: FfiNonogramGame) : NonogramBoard {
+    override val width: Int = game.width().toInt()
+
+    override val height: Int = game.height().toInt()
+
+    override val cellCount: Int = game.cellCount().toInt()
+
+    override val seed: Long
+        get() = game.seed().toLong()
+
+    override val fellBack: Boolean
+        get() = game.fellBack()
+
+    override fun rowClues(): List<ClueLine> =
+        game.rowClues().map { line -> ClueLine(line.values.map { it.toInt() }) }
+
+    override fun columnClues(): List<ClueLine> =
+        game.columnClues().map { line -> ClueLine(line.values.map { it.toInt() }) }
+
+    override fun cellsState(): List<Int> = game.cellsState().map { it.toInt() }
+
+    override fun brokenRows(): List<Int> = game.brokenRows().map { it.toInt() }
+
+    override fun brokenColumns(): List<Int> = game.brokenColumns().map { it.toInt() }
+
+    override fun toggleFilled(index: Int): Boolean = game.toggleFilled(index.toUInt())
+
+    override fun toggleMarked(index: Int): Boolean = game.toggleMarked(index.toUInt())
+
+    override fun isSolved(): Boolean = game.isSolved()
+
+    override fun toSnapshot(): ByteArray = game.toSnapshot()
+}
+
+/**
+ * Wraps the generated hashi object.
+ *
+ * The island and bridge lists are converted on every call rather than cached: a connection
+ * changes both of them, and a list captured when the wrapper was built would draw the board
+ * the player connected before.
+ */
+private class Hashi(private val game: FfiHashiGame) : HashiBoard {
+    override val width: Int = game.width().toInt()
+
+    override val height: Int = game.height().toInt()
+
+    override val islandCount: Int = game.islandCount().toInt()
+
+    override val seed: Long = game.seed().toLong()
+
+    override fun islands(): List<HashiIsland> =
+        game.islands().map { island ->
+            HashiIsland(
+                row = island.row.toInt(),
+                column = island.column.toInt(),
+                clue = island.clue.toInt(),
+                degree = island.degree.toInt(),
+                marked = island.marked,
+            )
+        }
+
+    override fun bridges(): List<HashiBridge> =
+        game.bridges().map { bridge ->
+            HashiBridge(a = bridge.a.toInt(), b = bridge.b.toInt(), count = bridge.count.toInt())
+        }
+
+    override fun connect(first: Int, second: Int): Boolean =
+        game.connect(first.toUInt(), second.toUInt())
+
+    override fun toggleMark(index: Int): Boolean = game.toggleMark(index.toUInt())
+
+    override fun strandedIslands(): List<Int> = game.strandedIslands().map { it.toInt() }
+
+    override fun isSolved(): Boolean = game.isSolved()
 
     override fun toSnapshot(): ByteArray = game.toSnapshot()
 }

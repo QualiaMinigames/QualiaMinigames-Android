@@ -14,15 +14,19 @@
 
 package com.qiushui1012.app.minigames.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,18 +42,14 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.text.TextMeasurer
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.qiushui1012.app.minigames.AlertDark
 import com.qiushui1012.app.minigames.AlertLight
 import com.qiushui1012.app.minigames.EnteredDigit
@@ -61,20 +61,13 @@ import com.qiushui1012.app.minigames.rules.PipesBoard
 import com.qiushui1012.app.minigames.rules.PipesLayout
 import com.qiushui1012.app.minigames.rules.PipesSide
 import com.qiushui1012.app.minigames.rules.SudokuBoard
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
+import android.graphics.Paint
 
-/**
- * The density a board's text is measured against.
- *
- * The text of a board is measured in screen pixels and drawn at the reciprocal of the canvas
- * scale, so that a layout's size — which is rounded to whole pixels — is a negligible fraction
- * of the glyph. Measuring a digit at one board unit instead rounded it to nothing, and the
- * arithmetic that centred it put a fifth of its width outside the cell; measuring at the
- * on-screen size also rasterises the glyph once at the resolution it is seen at, rather than
- * magnifying a tiny one.
- */
-private val BoardTextDensity = Density(1f, 1f)
+/** The size a sudoku digit is drawn at, as a fraction of a cell. */
+private const val DIGIT_TEXT_SIZE = 0.62f
+
+/** The size a sudoku note is drawn at, as a fraction of a cell. */
+private const val NOTE_TEXT_SIZE = 0.22f
 
 /**
  * The colour of the pipes board's lines, frame and cells alike.
@@ -225,7 +218,13 @@ fun SudokuPlay(
     settings: Settings,
     onSolved: () -> Unit,
 ) {
-    val textMeasurer = rememberTextMeasurer()
+    val context = LocalContext.current
+    // One paint for the whole board, set per digit: the numbers are drawn by the board rather
+    // than by a text measurer, for the reason [BoardText] gives.
+    val digitPaint =
+        remember(context) {
+            boardNumberPaint(BoardText.typeface(context), DIGIT_TEXT_SIZE)
+        }
     var selected by remember { mutableStateOf<Int?>(null) }
     var notesMode by remember { mutableStateOf(false) }
     var revision by remember { mutableIntStateOf(0) }
@@ -273,11 +272,13 @@ fun SudokuPlay(
                     @Suppress("UNUSED_EXPRESSION")
                     revision
                     val chosen = selected
-                    // One board unit is `scale` screen pixels, which is the size the text is
-                    // measured at: measuring a digit at its on-screen size is what keeps its
-                    // rounded layout a negligible fraction of it, and what lets it be drawn
-                    // once at the resolution it is seen at.
+                    // One board unit is `scale` screen pixels, which is the size the shading is
+                    // drawn at. The digits are drawn in board units rather than in screen
+                    // pixels: a paint sized in board units keeps the glyph at the same fraction
+                    // of its cell at every zoom, and [BoardText.centre] measures the ink at a
+                    // hundred times that size, so the placement's rounding stays below a pixel.
                     val pixelsPerUnit = scale
+                    val digits = Paint(digitPaint)
                     // The board's own background is laid down once, before the shading: the
                     // shading is a tint over the board, so a fill on top of it would erase it
                     // and the selected cell would look exactly like every other one.
@@ -304,7 +305,7 @@ fun SudokuPlay(
                     for (row in 0 until 9) {
                         for (column in 0 until 9) {
                             drawCellText(
-                                measurer = textMeasurer,
+                                paint = digits,
                                 row = row,
                                 column = column,
                                 board = board,
@@ -314,7 +315,6 @@ fun SudokuPlay(
                                 givenColor = givenColor,
                                 enteredColor = enteredColor,
                                 noteColor = noteColor,
-                                scale = pixelsPerUnit,
                             )
                         }
                     }
@@ -381,7 +381,7 @@ private fun DrawScope.drawGrid(divider: Color) {
 
 /** Draws one cell's digit or, when it is empty, its notes. */
 private fun DrawScope.drawCellText(
-    measurer: TextMeasurer,
+    paint: android.graphics.Paint,
     row: Int,
     column: Int,
     board: SudokuBoard,
@@ -391,12 +391,9 @@ private fun DrawScope.drawCellText(
     givenColor: Color,
     enteredColor: Color,
     noteColor: Color,
-    scale: Float,
 ) {
     val index = row * 9 + column
     val digit = board.digit(index)
-    val cellSize = 1f
-    val centre = Offset(column + 0.5f, row + 0.5f)
 
     if (digit != 0) {
         val color =
@@ -406,27 +403,10 @@ private fun DrawScope.drawCellText(
                 else -> enteredColor
             }
         // One weight for every digit, given or entered. A given is told apart by its colour
-        // alone: a lighter stroke made a digit the player typed look like a note.
-        val style =
-            TextStyle(
-                color = color,
-                // The text is measured in screen pixels, so the size is the cell's size on
-                // screen times the fraction of it the digit fills.
-                fontSize = (cellSize * 0.62f * scale).sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-        val layout = measurer.measure(digit.toString(), style, density = BoardTextDensity)
-        // The layout is in screen pixels, and the canvas is in board units: the digit is placed
-        // at the scale that turns one into the other, around the cell's own centre.
-        withTransform({
-            translate(
-                centre.x - layout.size.width / 2f / scale,
-                centre.y - layout.size.height / 2f / scale,
-            )
-            scale(1f / scale, 1f / scale, pivot = Offset.Zero)
-        }) {
-            drawText(textLayoutResult = layout)
-        }
+        // alone: a second weight made a digit the player typed read as something else.
+        paint.textSize = DIGIT_TEXT_SIZE
+        paint.color = color.toArgb()
+        drawCentredText(paint, digit.toString(), column + 0.5f, row + 0.5f)
         return
     }
 
@@ -434,23 +414,39 @@ private fun DrawScope.drawCellText(
     if (notes == 0) {
         return
     }
-    val noteStyle = TextStyle(color = noteColor, fontSize = (cellSize * 0.22f * scale).sp)
+    paint.textSize = NOTE_TEXT_SIZE
+    paint.color = noteColor.toArgb()
     for (noteDigit in 1..9) {
         if (notes and (1 shl noteDigit) == 0) {
             continue
         }
         val noteRow = (noteDigit - 1) / 3
         val noteColumn = (noteDigit - 1) % 3
-        val layout = measurer.measure(noteDigit.toString(), noteStyle, density = BoardTextDensity)
-        withTransform({
-            translate(
-                column + (noteColumn + 0.5f) * (cellSize / 3f) - layout.size.width / 2f / scale,
-                row + (noteRow + 0.5f) * (cellSize / 3f) - layout.size.height / 2f / scale,
-            )
-            scale(1f / scale, 1f / scale, pivot = Offset.Zero)
-        }) {
-            drawText(textLayoutResult = layout)
-        }
+        drawCentredText(
+            paint,
+            noteDigit.toString(),
+            column + (noteColumn + 0.5f) / 3f,
+            row + (noteRow + 0.5f) / 3f,
+        )
+    }
+}
+
+/**
+ * Draws text so that its ink is centred on a point, in board units.
+ *
+ * The pen is placed on the baseline, so the offset from [BoardText.centre] is added to the
+ * point rather than subtracted: the offset's `y` is how far below the point the baseline has to
+ * sit for the ink's middle to land on it.
+ */
+private fun DrawScope.drawCentredText(
+    paint: android.graphics.Paint,
+    text: String,
+    centreX: Float,
+    centreY: Float,
+) {
+    val offset = BoardText.centre(text, paint)
+    drawIntoCanvas { canvas ->
+        canvas.nativeCanvas.drawText(text, centreX + offset.x, centreY + offset.y, paint)
     }
 }
 
@@ -462,15 +458,40 @@ private fun SudokuControls(
     onDigit: (Int) -> Unit,
     onErase: () -> Unit,
 ) {
+    // A rounded rectangle rather than the pill a Material button is by default: the controls are
+    // a keypad under a square board, and a row of pills read as a row of unrelated buttons.
+    val key = MaterialTheme.shapes.small
+    val outline = MaterialTheme.colorScheme.onBackground
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = Space.l, vertical = Space.s),
         verticalArrangement = Arrangement.spacedBy(Space.s),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
-            Button(onClick = onToggleNotes) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Space.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // The note toggle says whether notes are on by being filled when they are and
+            // outlined when they are not. This is issue #1: a button whose only state was the
+            // label left the player unable to tell which mode the next digit would go in.
+            Button(
+                onClick = onToggleNotes,
+                shape = key,
+                border = if (notesMode) null else BorderStroke(1.dp, outline),
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = if (notesMode) MaterialTheme.colorScheme.primary else Color.Transparent,
+                        contentColor = if (notesMode) MaterialTheme.colorScheme.onPrimary else outline,
+                    ),
+                elevation = null,
+            ) {
                 Text(stringResource(R.string.sudoku_notes))
             }
-            Button(onClick = onErase) {
+            // Erase sits at the far end of the row, away from the note toggle: the two are not a
+            // pair, and a control that clears a cell should not sit next to the one a thumb
+            // reaches for while entering digits.
+            Box(Modifier.weight(1f))
+            OutlinedButton(onClick = onErase, shape = key) {
                 Text(stringResource(R.string.sudoku_erase))
             }
         }
@@ -480,7 +501,11 @@ private fun SudokuControls(
         ) {
             for (digit in 1..9) {
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                    Button(onClick = { onDigit(digit) }) {
+                    Button(
+                        onClick = { onDigit(digit) },
+                        shape = key,
+                        contentPadding = PaddingValues(horizontal = Space.xs, vertical = Space.s),
+                    ) {
                         Text(digit.toString())
                     }
                 }

@@ -87,6 +87,16 @@ data class Settings(
     val lastMinesweeperPercent: String = "123",
     /** The mode the last minesweeper game was started with, by its storage name. */
     val lastMinesweeperMode: String = "normal",
+    /** The width the last nonogram game was started with. */
+    val lastNonogramWidth: Int = 10,
+    /** The height the last nonogram game was started with. */
+    val lastNonogramHeight: Int = 10,
+    /** The width the last hashi game was started with, in points. */
+    val lastHashiWidth: Int = 10,
+    /** The height the last hashi game was started with, in points. */
+    val lastHashiHeight: Int = 10,
+    /** The island share the last hashi game was started with, in thousandths. */
+    val lastHashiPercent: String = "150",
 )
 
 /**
@@ -124,6 +134,11 @@ class SettingsStore(private val store: DataStore<Preferences>) {
                     lastMinesweeperHeight = preferences[Keys.lastMinesweeperHeight]?.toIntOrNull() ?: 9,
                     lastMinesweeperPercent = preferences[Keys.lastMinesweeperPercent] ?: "123",
                     lastMinesweeperMode = preferences[Keys.lastMinesweeperMode] ?: "normal",
+                    lastNonogramWidth = preferences[Keys.lastNonogramWidth]?.toIntOrNull() ?: 10,
+                    lastNonogramHeight = preferences[Keys.lastNonogramHeight]?.toIntOrNull() ?: 10,
+                    lastHashiWidth = preferences[Keys.lastHashiWidth]?.toIntOrNull() ?: 10,
+                    lastHashiHeight = preferences[Keys.lastHashiHeight]?.toIntOrNull() ?: 10,
+                    lastHashiPercent = preferences[Keys.lastHashiPercent] ?: "150",
                 )
             }
 
@@ -186,9 +201,25 @@ class SettingsStore(private val store: DataStore<Preferences>) {
         }
     }
 
+    /** Writes the parameters the next nonogram game starts with. */
+    suspend fun setLastNonogram(width: Int, height: Int) {
+        store.edit {
+            it[Keys.lastNonogramWidth] = width.toString()
+            it[Keys.lastNonogramHeight] = height.toString()
+        }
+    }
+
+    /** Writes the parameters the next hashi game starts with. */
+    suspend fun setLastHashi(width: Int, height: Int, percent: String) {
+        store.edit {
+            it[Keys.lastHashiWidth] = width.toString()
+            it[Keys.lastHashiHeight] = height.toString()
+            it[Keys.lastHashiPercent] = percent
+        }
+    }
+
     /** The keys the settings are stored under. */
-    private object Keys {
-        /** The default player name. */
+    private object Keys {        /** The default player name. */
         val playerName = stringPreferencesKey("player_name")
 
         /** The language choice, by enum name. */
@@ -223,6 +254,21 @@ class SettingsStore(private val store: DataStore<Preferences>) {
 
         /** The mode of the last minesweeper game. */
         val lastMinesweeperMode = stringPreferencesKey("last_minesweeper_mode")
+
+        /** The width of the last nonogram game. */
+        val lastNonogramWidth = stringPreferencesKey("last_nonogram_width")
+
+        /** The height of the last nonogram game. */
+        val lastNonogramHeight = stringPreferencesKey("last_nonogram_height")
+
+        /** The width of the last hashi game. */
+        val lastHashiWidth = stringPreferencesKey("last_hashi_width")
+
+        /** The height of the last hashi game. */
+        val lastHashiHeight = stringPreferencesKey("last_hashi_height")
+
+        /** The island share of the last hashi game. */
+        val lastHashiPercent = stringPreferencesKey("last_hashi_percent")
     }
 }
 

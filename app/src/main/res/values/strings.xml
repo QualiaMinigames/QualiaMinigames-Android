@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!--
   Default locale: English (United States).
 
@@ -76,6 +76,31 @@
     <string name="minesweeper_mines_counter">%1$d of %2$d left</string>
     <string name="minesweeper_lost">Congratulations, you hit a mine!</string>
     <string name="minesweeper_won">Congratulations, you cleared the board!</string>
+
+    <!-- Nonogram -->
+    <string name="home_nonogram_name">Nonogram</string>
+    <string name="home_nonogram_summary">%1$d×%2$d</string>
+    <string name="nonogram_width_range">Width (4–64)</string>
+    <string name="nonogram_height_range">Height (4–64)</string>
+    <string name="nonogram_slider_ticks">Slider range 4–35</string>
+    <string name="nonogram_generating">Generating the board</string>
+    <string name="nonogram_generate_failed">This board could not be generated. Try another seed or a smaller board.</string>
+    <string name="nonogram_fell_back">No unique board was found, so this puzzle may have more than one answer</string>
+    <string name="nonogram_won">Solved</string>
+    <string name="cd_nonogram_board">Nonogram board</string>
+
+    <!-- Hashi -->
+    <string name="home_hashi_name">Hashi</string>
+    <string name="home_hashi_summary">%1$d×%2$d, %3$d islands</string>
+    <string name="hashi_width_range">Width (4–35 points)</string>
+    <string name="hashi_height_range">Height (4–35 points)</string>
+    <string name="hashi_islands">Islands</string>
+    <string name="hashi_islands_helper_percent">%1$s of the points</string>
+    <string name="hashi_islands_helper_count">%1$d islands</string>
+    <string name="hashi_slider_ticks">Slider snaps to steps of 5 percent</string>
+    <string name="hashi_generate_failed">This board could not be generated. Try another seed or fewer islands.</string>
+    <string name="hashi_won">Solved</string>
+    <string name="cd_hashi_board">Hashi board</string>
 
     <!-- Play -->
     <string name="play_undo">Undo</string>

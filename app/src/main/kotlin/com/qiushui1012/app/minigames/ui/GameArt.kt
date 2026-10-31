@@ -90,6 +90,8 @@ object GameArt {
             GameKind.Pipes -> "pipes.svg"
             GameKind.Sudoku -> "sudoku.svg"
             GameKind.Minesweeper -> "minesweeper.svg"
+            GameKind.Nonogram -> "nonogram.svg"
+            GameKind.Hashi -> "hashi.svg"
         }
 
     /** The drawings, once per process: parsing a file per frame would be absurd. */
@@ -176,7 +178,7 @@ object GameArt {
         val luminance = 0.299f * red + 0.587f * green + 0.114f * blue
         return when {
             saturation > 0.5f && red > green && red > blue -> Tone.Alert
-            saturation < 0.2f && luminance in 0.5f..0.85f -> Tone.Neutral
+            saturation < 0.2f && luminance in 0.5f..0.95f -> Tone.Neutral
             luminance < 0.5f -> Tone.Ink
             else -> Tone.Surface
         }

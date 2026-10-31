@@ -312,4 +312,85 @@ class GameFlowTest {
         assertEquals(true, record.typedSeed)
         assertEquals(4_242L, record.seed)
     }
+
+    @Test
+    fun a_saved_nonogram_game_is_restored_with_its_cells_and_its_clues() {
+        val board = requireNotNull(Rules.newNonogram(9, 9, 13))
+        board.toggleFilled(5)
+        board.toggleMarked(6)
+        board.toggleMarked(20)
+        val save = SavedGame(GameKind.Nonogram, board.toSnapshot(), "QiuShui", 41, 1_000)
+
+        val resumed = requireNotNull(restoreGame(save)) as GameInProgress.Nonogram
+        assertEquals("QiuShui", resumed.playerName)
+        assertEquals(41, resumed.elapsedSeconds)
+        assertEquals(board.cellsState(), resumed.board.cellsState())
+        assertEquals(board.rowClues(), resumed.board.rowClues())
+        assertEquals(RecordKey.Nonogram(9, 9), resumed.key)
+        assertEquals(board.seed, resumed.seed)
+    }
+
+    @Test
+    fun a_saved_hashi_game_is_restored_with_its_bridges_and_its_marks() {
+        val board = requireNotNull(Rules.newHashi(9, 9, 12, 17))
+        val joinable = (1 until board.islandCount).firstOrNull { board.connect(0, it) }
+        requireNotNull(joinable) { "the first island reaches another one" }
+        board.toggleMark(2)
+        val save = SavedGame(GameKind.Hashi, board.toSnapshot(), "QiuShui", 27, 1_000)
+
+        val resumed = requireNotNull(restoreGame(save)) as GameInProgress.Hashi
+        assertEquals("QiuShui", resumed.playerName)
+        assertEquals(27, resumed.elapsedSeconds)
+        assertEquals(board.islands(), resumed.board.islands())
+        assertEquals(board.bridges(), resumed.board.bridges())
+        assertEquals(RecordKey.Hashi(9, 9, 12), resumed.key)
+    }
+
+    @Test
+    fun a_nonogram_that_finishes_writes_a_record_and_clears_its_save() = runBlocking {
+        val store = newStore()
+        val board = requireNotNull(Rules.newNonogram(4, 4, 7))
+        store.putSave(SavedGame(GameKind.Nonogram, board.toSnapshot(), "QiuShui", 3, 1_000))
+        val game = GameInProgress.Nonogram(board, "QiuShui", 3)
+        val record =
+            Record(
+                key = game.key,
+                playerName = game.playerName,
+                seconds = 3,
+                finishedAt = 2_000,
+                seed = game.seed,
+                typedSeed = game.typedSeed,
+            )
+        store.addRecord(record)
+        store.clearSave(GameKind.Nonogram)
+
+        assertNull("a finished game leaves no save", store.save(GameKind.Nonogram).first())
+        assertEquals(1, store.records.first().size)
+        assertEquals(RecordKey.Nonogram(4, 4), store.records.first().single().key)
+        assertEquals(3L, store.best(record.key).first())
+    }
+
+    @Test
+    fun a_typed_seed_on_a_new_game_reaches_its_record() {
+        // The two new games carry the flag the same way the three others do: it belongs to the
+        // game, and a record copies it while the game is still being played. The seed a record
+        // keeps is the one the board was drawn from, which is a derived seed rather than the
+        // number the player typed: typing the same text again has to replay the same board,
+        // and the derivation is what turns one into the other.
+        val b = requireNotNull(Rules.newNonogram(6, 6, 4_242))
+        val nonogram = GameInProgress.Nonogram(b, "QiuShui", 9, typedSeed = true)
+        val again = requireNotNull(Rules.newNonogram(6, 6, 4_242))
+        assertEquals("the same seed replays the same board", again.seed, nonogram.seed)
+        assertEquals(again.rowClues(), nonogram.board.rowClues())
+        assertEquals(true, nonogram.typedSeed)
+        assertEquals(RecordKey.Nonogram(6, 6), nonogram.key)
+
+        val h = requireNotNull(Rules.newHashi(8, 8, 10, 4_242))
+        val hashi = GameInProgress.Hashi(h, "QiuShui", 9, typedSeed = true)
+        val hashiAgain = requireNotNull(Rules.newHashi(8, 8, 10, 4_242))
+        assertEquals("the same seed replays the same board", hashiAgain.seed, hashi.seed)
+        assertEquals(hashiAgain.islands(), hashi.board.islands())
+        assertEquals(true, hashi.typedSeed)
+        assertEquals(RecordKey.Hashi(8, 8, 10), hashi.key)
+    }
 }

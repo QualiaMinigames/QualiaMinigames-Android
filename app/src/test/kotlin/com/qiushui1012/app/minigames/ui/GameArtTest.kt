@@ -95,8 +95,42 @@ class GameArtTest {
         // The four tones are decided from the colour alone, which is what keeps a mark edited
         // in a drawing program classified by the same rule as the marks that came before it.
         assertEquals(GameArt.Tone.Ink, GameArt.toneOf("#000000"))
-        assertEquals(GameArt.Tone.Surface, GameArt.toneOf("#ffffff"))
         assertEquals(GameArt.Tone.Alert, GameArt.toneOf("#de3a54"))
         assertEquals(GameArt.Tone.Neutral, GameArt.toneOf("#b3b3b3"))
+    }
+
+    @Test
+    fun a_light_grey_is_neutral_and_white_stays_the_surface() {
+        // The hashi mark's grid is #e6e6e6, which is lighter than the greys the first three
+        // marks use. It has to resolve to the neutral tone rather than to the surface, or the
+        // grid would be painted the card's own colour and disappear; white is still the surface,
+        // which is what a gap in a mark is drawn in.
+        assertEquals(GameArt.Tone.Neutral, GameArt.toneOf("#e6e6e6"))
+        assertEquals(GameArt.Tone.Surface, GameArt.toneOf("#ffffff"))
+    }
+
+    @Test
+    fun the_nonogram_mark_uses_the_ink_the_surface_and_the_alert() {
+        val tones = GameArt.of(context, GameKind.Nonogram).flatMap { listOfNotNull(it.fill, it.stroke) }.toSet()
+        assertTrue("the nonogram mark never paints the ink", GameArt.Tone.Ink in tones)
+        assertTrue("the nonogram mark never paints the surface", GameArt.Tone.Surface in tones)
+        assertTrue("the nonogram mark never paints the alert", GameArt.Tone.Alert in tones)
+    }
+
+    @Test
+    fun the_hashi_mark_uses_the_ink_the_surface_and_the_neutral() {
+        val tones = GameArt.of(context, GameKind.Hashi).flatMap { listOfNotNull(it.fill, it.stroke) }.toSet()
+        assertTrue("the hashi mark never paints the ink", GameArt.Tone.Ink in tones)
+        assertTrue("the hashi mark never paints the surface", GameArt.Tone.Surface in tones)
+        assertTrue("the hashi mark never paints the neutral", GameArt.Tone.Neutral in tones)
+    }
+
+    @Test
+    fun every_game_reports_its_own_file() {
+        assertEquals("pipes.svg", GameArt.file(GameKind.Pipes))
+        assertEquals("sudoku.svg", GameArt.file(GameKind.Sudoku))
+        assertEquals("minesweeper.svg", GameArt.file(GameKind.Minesweeper))
+        assertEquals("nonogram.svg", GameArt.file(GameKind.Nonogram))
+        assertEquals("hashi.svg", GameArt.file(GameKind.Hashi))
     }
 }

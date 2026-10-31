@@ -60,9 +60,6 @@ import com.qiushui1012.app.minigames.snapPerMille
 import com.qiushui1012.app.minigames.toStorageName
 import kotlinx.coroutines.launch
 
-/** The side the sliders cover, which the fields go beyond. */
-private const val SLIDER_MAX_SIZE = 35
-
 /** The most digits a size field accepts, which is what the largest board needs. */
 private const val MAX_SIZE_DIGITS = 3
 
@@ -208,6 +205,7 @@ fun MinesweeperNewGameDialog(
                 text = widthText,
                 minimum = minimum,
                 maximum = maximum,
+                note = stringResource(R.string.minesweeper_slider_ticks),
                 onText = { typed ->
                     widthText = typed.filter { it.isDigit() }.take(MAX_SIZE_DIGITS)
                     widthText.toIntOrNull()?.let { typedWidth ->
@@ -230,6 +228,7 @@ fun MinesweeperNewGameDialog(
                 text = heightText,
                 minimum = minimum,
                 maximum = maximum,
+                note = stringResource(R.string.minesweeper_slider_ticks),
                 onText = { typed ->
                     heightText = typed.filter { it.isDigit() }.take(MAX_SIZE_DIGITS)
                     heightText.toIntOrNull()?.let { typedHeight ->
@@ -251,12 +250,12 @@ fun MinesweeperNewGameDialog(
                 onValueChange = { typed ->
                     minesText = typed
                     when (val parsed = parseMinesInput(typed)) {
-                        is com.qiushui1012.app.minigames.MinesInput.Count -> {
-                            typedCount = parsed.mines >= 0
-                            perMille = clampPerMille(perMilleForCount(cells, parsed.mines))
+                        is com.qiushui1012.app.minigames.CountOrPercent.Count -> {
+                            typedCount = parsed.count >= 0
+                            perMille = clampPerMille(perMilleForCount(cells, parsed.count))
                         }
 
-                        is com.qiushui1012.app.minigames.MinesInput.Percent -> {
+                        is com.qiushui1012.app.minigames.CountOrPercent.Percent -> {
                             typedCount = false
                             perMille = clampPerMille(parsed.perMille)
                         }
@@ -352,45 +351,6 @@ fun SeedField(
         placeholder = { Text(stringResource(R.string.dialog_seed_hint)) },
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
-    )
-}
-
-/** A size field above the slider that covers the range a game is actually played at. */
-@Composable
-private fun SizeControl(
-    label: String,
-    value: Int,
-    text: String,
-    minimum: Int,
-    maximum: Int,
-    onText: (String) -> Unit,
-    onSlider: (Int) -> Unit,
-) {
-    OutlinedTextField(
-        value = text,
-        onValueChange = onText,
-        label = { Text(label) },
-        singleLine = true,
-        // The field is wrong only when its value is outside the board's range. A value above
-        // the slider's range is a size the board accepts, so it is not an error: the slider
-        // simply sits at its end, which is what the note below says.
-        isError = text.toIntOrNull()?.let { it !in minimum..maximum } ?: true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        modifier = Modifier.fillMaxWidth(),
-    )
-    Slider(
-        // A value above the slider's range holds the slider at its last position rather than
-        // making it disappear: the field is where the value is read, and the slider is where
-        // the range is felt.
-        value = value.coerceIn(minimum, SLIDER_MAX_SIZE).toFloat(),
-        onValueChange = { onSlider(it.toInt().coerceIn(minimum, SLIDER_MAX_SIZE)) },
-        valueRange = minimum.toFloat()..SLIDER_MAX_SIZE.toFloat(),
-        steps = SLIDER_MAX_SIZE - minimum - 1,
-    )
-    Text(
-        stringResource(R.string.minesweeper_slider_ticks),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
 

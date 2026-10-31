@@ -102,6 +102,7 @@ fun MainShell(
                             HomeScreen(
                                 container = container,
                                 settings = settings,
+                                bottomInset = if (side) 0.dp else BottomNavigationInset,
                                 onContinue = onStartGame,
                                 onNewGame = { kind -> dialog = ShellDialog.NewGame(kind) },
                                 onDiscard = { kind -> dialog = ShellDialog.DiscardSave(kind) },

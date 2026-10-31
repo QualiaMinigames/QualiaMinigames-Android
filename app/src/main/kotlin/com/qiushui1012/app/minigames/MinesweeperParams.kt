@@ -21,23 +21,11 @@ import com.qiushui1012.app.minigames.rules.Rules
  * What the mine field of a minesweeper form means.
  *
  * The field accepts two spellings of the same thing: a number of mines, and a share of the
- * board written with a percent sign. Which one was typed is kept rather than flattened,
- * because the helper line under the field says the other one: a player who typed a count
- * reads the share it is, and a player who typed a share reads the count it comes to.
+ * board written with a percent sign. [CountOrPercent] is the one implementation, shared with
+ * the hashi island field: two fields that read `12.3%` differently would be two answers to one
+ * question.
  */
-sealed interface MinesInput {
-    /** A number of mines. */
-    data class Count(
-        /** The number the field spelled. */
-        val mines: Int,
-    ) : MinesInput
-
-    /** A share of the board, in thousandths of a percent. */
-    data class Percent(
-        /** The share, where `123` is 12.3%. */
-        val perMille: Int,
-    ) : MinesInput
-}
+typealias MinesInput = CountOrPercent
 
 /** The widest share a mine field accepts, in thousandths of a percent. */
 fun inputPerMilleMax(mode: MinesweeperMode): Int =
@@ -80,63 +68,10 @@ fun minesForPerMille(cells: Int, perMille: Int): Int =
 /**
  * Reads what a player typed into the mine field.
  *
- * A trailing percent sign means the number is a share, and a plain number means a count. The
- * share is read a digit at a time into thousandths of a percent rather than through a float:
- * `12.3` becomes `123` exactly, and a value at a snap point stays at it instead of landing one
- * thousandth away and reading as a different density.
- *
- * Returns null when the text is neither: an empty field, a sign, a second decimal point, or a
- * share with more than one decimal place.
+ * This forwards to [parseCountOrPercent] rather than parsing again: the mine field and the
+ * island field differ in what the number counts, not in how the text is read.
  */
-fun parseMinesInput(text: String): MinesInput? {
-    val trimmed = text.trim()
-    if (trimmed.isEmpty()) {
-        return null
-    }
-    return if (trimmed.endsWith("%")) {
-        parsePerMille(trimmed.dropLast(1))?.let(MinesInput::Percent)
-    } else {
-        trimmed.takeIf { value -> value.all { it in '0'..'9' } }?.toIntOrNull()?.let(MinesInput::Count)
-    }
-}
-
-/**
- * Reads a share into thousandths of a percent.
- *
- * The whole part is a percent and the single decimal digit is a tenth of a percent, so `12` is
- * `120` and `12.3` is `123`. Anything else — a fraction of a thousandth, a negative sign, a
- * trailing point, a second point — is refused, because the field accepts what it can display.
- */
-fun parsePerMille(text: String): Int? {
-    val trimmed = text.trim()
-    if (trimmed.isEmpty()) {
-        return null
-    }
-    val parts = trimmed.split('.')
-    if (parts.size > 2) {
-        return null
-    }
-    val whole = parts[0]
-    if (whole.isEmpty() || !whole.all { it in '0'..'9' }) {
-        return null
-    }
-    val fraction = if (parts.size == 2) parts[1] else ""
-    if (fraction.length != (parts.size - 1) || !fraction.all { it in '0'..'9' }) {
-        return null
-    }
-    val wholeValue = whole.toIntOrNull() ?: return null
-    // A tenth of a percent is one unit of the thousandth-of-a-percent scale times ten: the
-    // scale's unit is 0.1%, so a whole percent is ten of them.
-    val tenth = if (fraction.isEmpty()) 0 else fraction.toInt()
-    return wholeValue * 10 + tenth
-}
-
-/** Returns a share as the field writes it, with one decimal place only when it has one. */
-fun formatPerMille(perMille: Int): String {
-    val whole = perMille / 10
-    val tenth = perMille % 10
-    return if (tenth == 0) "$whole%" else "$whole.$tenth%"
-}
+fun parseMinesInput(text: String): MinesInput? = parseCountOrPercent(text)
 
 /**
  * Returns the snap point a share takes, or null when it stays where it is.

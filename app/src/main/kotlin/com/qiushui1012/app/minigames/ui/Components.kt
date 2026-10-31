@@ -24,9 +24,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.qiushui1012.app.minigames.CardShadowBlur
 import com.qiushui1012.app.minigames.CardShadowOffset
@@ -228,4 +232,59 @@ private fun surfaceButton(
 @Composable
 fun LinkButton(text: String, onClick: () -> Unit) {
     TextButton(onClick = onClick) { Text(text) }
+}
+
+/**
+ * The largest value a size slider covers, which is the range the games are actually played at.
+ *
+ * A field above the slider accepts more: the boards go to 128 cells on a side for minesweeper
+ * and 64 for a nonogram, neither of which a slider can land on. A value past this one holds the
+ * slider at its end and starts the game at the value the field holds.
+ */
+const val SIZE_SLIDER_MAX = 35
+
+/**
+ * A size field above a slider that covers the range a game is actually played at.
+ *
+ * [note] is the line under the slider that says what its range is, which differs per game: a
+ * minesweeper board's slider covers a density the field goes beyond, and a nonogram's covers
+ * 4 to 35 of a range that reaches 64.
+ */
+@Composable
+fun SizeControl(
+    label: String,
+    value: Int,
+    text: String,
+    minimum: Int,
+    maximum: Int,
+    note: String,
+    onText: (String) -> Unit,
+    onSlider: (Int) -> Unit,
+) {
+    OutlinedTextField(
+        value = text,
+        onValueChange = onText,
+        label = { Text(label) },
+        singleLine = true,
+        // The field is wrong only when its value is outside the board's range. A value above
+        // the slider's range is a size the board accepts, so it is not an error: the slider
+        // simply sits at its end, which is what the note below says.
+        isError = text.toIntOrNull()?.let { it !in minimum..maximum } ?: true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Slider(
+        // A value above the slider's range holds the slider at its last position rather than
+        // making it disappear: the field is where the value is read, and the slider is where
+        // the range is felt.
+        value = value.coerceIn(minimum, SIZE_SLIDER_MAX).toFloat(),
+        onValueChange = { onSlider(it.toInt().coerceIn(minimum, SIZE_SLIDER_MAX)) },
+        valueRange = minimum.toFloat()..SIZE_SLIDER_MAX.toFloat(),
+        steps = SIZE_SLIDER_MAX - minimum - 1,
+    )
+    Text(
+        note,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }

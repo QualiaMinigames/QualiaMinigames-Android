@@ -48,6 +48,8 @@ class RecordImageTest {
             is RecordKey.Pipes -> "Pipes"
             is RecordKey.Sudoku -> "Sudoku"
             is RecordKey.Minesweeper -> "Minesweeper"
+            is RecordKey.Nonogram -> "Nonogram"
+            is RecordKey.Hashi -> "Hashi"
         }
     }
 
@@ -57,6 +59,8 @@ class RecordImageTest {
             is RecordKey.Pipes -> "${key.size}x${key.size}"
             is RecordKey.Sudoku -> key.difficulty
             is RecordKey.Minesweeper -> "${key.width}x${key.height}, ${key.mines} mines"
+            is RecordKey.Nonogram -> "${key.width}x${key.height}"
+            is RecordKey.Hashi -> "${key.width}x${key.height}, ${key.islands} islands"
         }
     }
 

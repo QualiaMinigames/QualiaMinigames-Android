@@ -21,6 +21,7 @@ import com.qiushui1012.app.minigames.rules.MinesweeperCell
 import com.qiushui1012.app.minigames.rules.MinesweeperEvent
 import com.qiushui1012.app.minigames.rules.MinesweeperMode
 import com.qiushui1012.app.minigames.rules.MinesweeperPhase
+import com.qiushui1012.app.minigames.rules.NonogramCell
 import com.qiushui1012.app.minigames.rules.PipesLayout
 import com.qiushui1012.app.minigames.rules.Rules
 import com.qiushui1012.app.minigames.rules.SudokuDifficulty
@@ -28,6 +29,7 @@ import com.qiushui1012.app.minigames.ui.formatDuration
 import com.qiushui1012.app.minigames.ui.groupRecords
 import com.qiushui1012.app.minigames.ui.recordsByKind
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -215,6 +217,144 @@ class RulesTest {
         assertEquals(40, Rules.minesweeperMinesForPerMille(256, 156))
         assertEquals(99, Rules.minesweeperMinesForPerMille(480, 206))
     }
+
+    @Test
+    fun a_nonogram_board_starts_empty_with_a_clue_for_every_line() {
+        val board = requireNotNull(Rules.newNonogram(10, 10, 7))
+        assertEquals(10, board.width)
+        assertEquals(10, board.height)
+        assertEquals(100, board.cellCount)
+        assertEquals(10, board.rowClues().size)
+        assertEquals(10, board.columnClues().size)
+        assertTrue(board.rowClues().all { it.values.isNotEmpty() })
+        assertTrue(board.cellsState().all { it == NonogramCell.EMPTY })
+        assertTrue(!board.isSolved())
+    }
+
+    @Test
+    fun the_same_nonogram_seed_draws_the_same_clues() {
+        val first = requireNotNull(Rules.newNonogram(9, 7, 11))
+        val second = requireNotNull(Rules.newNonogram(9, 7, 11))
+        assertEquals(first.rowClues(), second.rowClues())
+        assertEquals(first.columnClues(), second.columnClues())
+        assertEquals(first.seed, second.seed)
+    }
+
+    @Test
+    fun a_nonogram_toggle_changes_the_cell_and_its_broken_lines() {
+        val board = requireNotNull(Rules.newNonogram(4, 4, 3))
+        assertTrue(board.toggleFilled(0))
+        assertEquals(NonogramCell.FILLED, board.cellsState()[0])
+        assertTrue(board.toggleMarked(0))
+        assertEquals(NonogramCell.MARKED, board.cellsState()[0])
+        // A mark is cleared by the first click and filled by the second: the two states are
+        // opposite claims about one cell, so one click never turns a mark straight into ink.
+        assertTrue(board.toggleFilled(0))
+        assertEquals(NonogramCell.EMPTY, board.cellsState()[0])
+        assertTrue(board.toggleFilled(0))
+        assertEquals(NonogramCell.FILLED, board.cellsState()[0])
+        assertTrue("an index off the board changes nothing", !board.toggleFilled(16))
+    }
+
+    @Test
+    fun a_hashi_island_past_its_clue_is_reported_rather_than_refused() {
+        // A board of two islands joined by two bridges: each clue is two, so the board starts
+        // solved. Taking a bridge away and laying two the other way is not possible on two
+        // islands, so the test asks the two facts that matter about a legal board: a bridge is
+        // laid rather than refused, and a clue that is met reports no stranded island.
+        val board = requireNotNull(Rules.newHashi(6, 6, 2, 5))
+        assertEquals(2, board.islandCount)
+        assertEquals(0, board.islands()[0].degree)
+        assertTrue("a legal bridge is laid", board.connect(0, 1))
+        assertTrue("the pair takes a double bridge", board.connect(0, 1))
+        assertEquals(2, board.islands()[0].degree)
+        // Two islands whose clues come from one edge of two bridges: meeting the clue exactly is
+        // not stranded, and the board is solved.
+        assertTrue(board.isSolved())
+        assertTrue(board.strandedIslands().isEmpty())
+    }
+
+    @Test
+    fun a_nonogram_snapshot_round_trips_across_the_binding() {
+        val board = requireNotNull(Rules.newNonogram(8, 8, 5))
+        board.toggleFilled(9)
+        board.toggleMarked(10)
+        val restored = requireNotNull(Rules.nonogramFromSnapshot(board.toSnapshot()))
+        assertEquals(board.cellsState(), restored.cellsState())
+        assertEquals(board.rowClues(), restored.rowClues())
+        assertEquals(board.columnClues(), restored.columnClues())
+        assertEquals(board.fellBack, restored.fellBack)
+    }
+
+    @Test
+    fun a_nonogram_size_outside_the_range_is_refused() {
+        assertNull(Rules.newNonogram(3, 10, 0))
+        assertNull(Rules.newNonogram(10, 65, 0))
+    }
+
+    @Test
+    fun a_hashi_board_holds_the_islands_it_was_asked_for() {
+        val board = requireNotNull(Rules.newHashi(10, 10, 15, 7))
+        assertEquals(10, board.width)
+        assertEquals(10, board.height)
+        assertEquals(15, board.islandCount)
+        assertEquals(15, board.islands().size)
+        assertTrue(board.islands().all { it.clue >= 1 })
+        assertTrue(board.islands().all { it.degree == 0 })
+        assertTrue(board.bridges().isEmpty())
+    }
+
+    @Test
+    fun a_hashi_connection_cycles_and_a_refusal_changes_nothing() {
+        val board = requireNotNull(Rules.newHashi(6, 6, 4, 3))
+        val joinable = (1 until board.islandCount).firstOrNull { board.connect(0, it) }
+        assertTrue("the first island reaches another one", joinable != null)
+        assertEquals("a fresh connection is one bridge", 1, board.bridges().first().count)
+        assertTrue("the second connection makes it two", board.connect(0, requireNotNull(joinable)))
+        assertEquals(2, board.bridges().first().count)
+        assertTrue("the third connection takes it back to none", board.connect(0, requireNotNull(joinable)))
+        assertTrue("two cycles back to none", board.bridges().isEmpty())
+        assertFalse(board.connect(0, 0))
+        assertFalse(board.connect(0, 99))
+    }
+
+    @Test
+    fun a_hashi_mark_does_not_finish_the_board() {
+        val board = requireNotNull(Rules.newHashi(8, 8, 10, 4))
+        assertTrue(board.toggleMark(0))
+        assertTrue(board.islands()[0].marked)
+        assertFalse(board.toggleMark(99))
+    }
+
+    @Test
+    fun a_hashi_snapshot_round_trips_across_the_binding() {
+        val board = requireNotNull(Rules.newHashi(9, 9, 12, 6))
+        board.toggleMark(1)
+        val restored = requireNotNull(Rules.hashiFromSnapshot(board.toSnapshot()))
+        assertEquals(board.islands(), restored.islands())
+        assertEquals(board.seed, restored.seed)
+    }
+
+    @Test
+    fun a_hashi_board_outside_its_ranges_is_refused() {
+        assertNull(Rules.newHashi(3, 10, 5, 0))
+        assertNull(Rules.newHashi(10, 36, 5, 0))
+        assertNull(Rules.newHashi(10, 10, 1, 0))
+        assertNull(Rules.newHashi(10, 10, 101, 0))
+    }
+
+    @Test
+    fun the_new_games_report_the_ranges_the_dialogs_offer() {
+        assertEquals(4, Rules.nonogramMinSize())
+        assertEquals(64, Rules.nonogramMaxSize())
+        assertEquals(4, Rules.hashiMinPoints())
+        assertEquals(35, Rules.hashiMaxPoints())
+        assertEquals(100, Rules.hashiIslandPerMilleMin())
+        assertEquals(350, Rules.hashiIslandPerMilleMax())
+        assertEquals(listOf(100, 150, 200, 250, 300, 350), Rules.hashiIslandSnapPerMille())
+        assertEquals(2, Rules.hashiIslandsForPerMille(16, 100))
+        assertEquals(429, Rules.hashiIslandsForPerMille(1225, 350))
+    }
 }
 
 /** The records screen's grouping and formatting, which are pure functions over its data. */
@@ -236,6 +376,14 @@ class RecordsGroupingTest {
         seconds: Long,
         failed: Boolean? = null,
     ) = Record(RecordKey.Minesweeper(width, height, mines, noGuess), "Tester", seconds, 1_000, failed = failed)
+
+    /** Returns a finished nonogram game. */
+    private fun nonogram(width: Int, height: Int, seconds: Long) =
+        Record(RecordKey.Nonogram(width, height), "Tester", seconds, 1_000)
+
+    /** Returns a finished hashi game. */
+    private fun hashi(width: Int, height: Int, islands: Int, seconds: Long) =
+        Record(RecordKey.Hashi(width, height, islands), "Tester", seconds, 1_000)
 
     @Test
     fun pipes_groups_come_before_sudoku_and_are_ordered_by_size() {
@@ -323,5 +471,79 @@ class RecordsGroupingTest {
         assertEquals("1:00", formatDuration(60))
         assertEquals("1:00:00", formatDuration(3600))
         assertEquals("2:03:04", formatDuration(2 * 3600 + 3 * 60 + 4))
+    }
+
+    @Test
+    fun the_five_games_come_in_the_order_the_home_page_shows_them() {
+        val groups =
+            groupRecords(
+                listOf(
+                    hashi(10, 10, 15, 10),
+                    nonogram(10, 10, 10),
+                    minesweeper(9, 9, 10, false, 10),
+                    sudoku("easy", 10),
+                    pipes(9, false, 10),
+                ),
+            )
+        assertEquals(
+            listOf(
+                RecordKey.Pipes(9, false),
+                RecordKey.Sudoku("easy"),
+                RecordKey.Minesweeper(9, 9, 10, noGuess = false),
+                RecordKey.Nonogram(10, 10),
+                RecordKey.Hashi(10, 10, 15),
+            ),
+            groups.map { it.first },
+        )
+        assertEquals(
+            listOf(GameKind.Pipes, GameKind.Sudoku, GameKind.Minesweeper, GameKind.Nonogram, GameKind.Hashi),
+            recordsByKind(
+                listOf(
+                    pipes(9, false, 1),
+                    sudoku("easy", 1),
+                    minesweeper(9, 9, 10, false, 1),
+                    nonogram(10, 10, 1),
+                    hashi(10, 10, 15, 1),
+                ),
+            ).map { it.first },
+        )
+    }
+
+    @Test
+    fun a_nonogram_group_is_ordered_by_its_two_sides() {
+        val groups =
+            groupRecords(
+                listOf(
+                    nonogram(15, 9, 10),
+                    nonogram(9, 15, 10),
+                    nonogram(9, 9, 10),
+                ),
+            )
+        assertEquals(
+            listOf(RecordKey.Nonogram(9, 9), RecordKey.Nonogram(9, 15), RecordKey.Nonogram(15, 9)),
+            groups.map { it.first },
+        )
+    }
+
+    @Test
+    fun a_hashi_group_is_ordered_by_its_sides_and_its_islands() {
+        val groups =
+            groupRecords(
+                listOf(
+                    hashi(10, 10, 30, 10),
+                    hashi(12, 10, 15, 10),
+                    hashi(10, 10, 15, 10),
+                    hashi(10, 12, 15, 10),
+                ),
+            )
+        assertEquals(
+            listOf(
+                RecordKey.Hashi(10, 10, 15),
+                RecordKey.Hashi(10, 10, 30),
+                RecordKey.Hashi(10, 12, 15),
+                RecordKey.Hashi(12, 10, 15),
+            ),
+            groups.map { it.first },
+        )
     }
 }

@@ -110,6 +110,28 @@ fun ShellDialogContent(
                             onStartGame(it)
                         },
                     )
+
+                GameKind.Nonogram ->
+                    NonogramNewGameDialog(
+                        container = container,
+                        settings = settings,
+                        onDismiss = onDismiss,
+                        onStart = {
+                            onDismiss()
+                            onStartGame(it)
+                        },
+                    )
+
+                GameKind.Hashi ->
+                    HashiNewGameDialog(
+                        container = container,
+                        settings = settings,
+                        onDismiss = onDismiss,
+                        onStart = {
+                            onDismiss()
+                            onStartGame(it)
+                        },
+                    )
             }
 
         is ShellDialog.DiscardSave ->

@@ -1,4 +1,4 @@
-﻿// Copyright (C) 2026 QualiaMinigames contributors
+// Copyright (C) 2026 QualiaMinigames contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -45,11 +45,11 @@ plugins {
 // The published FFI this build asks for, and the digest the registry publishes for it. The
 // digest is checked once the archive is on disk: a build that fetched a substituted or
 // truncated file would otherwise compile something nobody reviewed.
-val ffiCrateVersion = providers.gradleProperty("qualia.minigames.ffi.version").getOrElse("0.2.0")
+val ffiCrateVersion = providers.gradleProperty("qualia.minigames.ffi.version").getOrElse("0.3.0")
 val ffiCrateSha256 =
     providers
         .gradleProperty("qualia.minigames.ffi.sha256")
-        .getOrElse("b2beabd4711293039482c02c20ec5bddf1c7c5744f3fcb02fa1302f573f5063e")
+        .getOrElse("59c96f46856c3a6660edaaa30af26cbd701e8006f38795be2405598039f7a8a5")
 val ffiLocalDir = providers.gradleProperty("qualia.minigames.ffi.localDir").orNull
 val rustSourceDir = ffiLocalDir?.let { rootProject.file(it) } ?: layout.projectDirectory.dir("rust").asFile
 val rustManifest = rustSourceDir.resolve("Cargo.toml")
@@ -298,8 +298,8 @@ android {
         applicationId = "com.qiushui1012.app.minigames"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.2.1"
+        versionCode = 4
+        versionName = "0.3.0"
 
         ndk.abiFilters += androidTargets.values
 
