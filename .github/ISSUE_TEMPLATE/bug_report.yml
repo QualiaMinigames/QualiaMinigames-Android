@@ -1,0 +1,88 @@
+name: Bug Report - Bug反馈
+description: Create a report to help us improve. - 反馈问题，帮助我们改进
+title: "[Bug] "
+labels:
+  - 🐛 Bug
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filling in this `issue`, please make sure that there are no similar or duplicate `issues` that have been opened.
+        填写此 `issue` 前，请先确认已经开启的 `issue` 没有类似或重复的 `issue`。
+
+  - type: input
+    id: version
+    attributes:
+      label: Version Details - 版本信息
+      description: |
+        What version of QualiaMinigames do you use? The number is at the bottom of the settings screen, in the form `x.x.x`. If you built it yourself from a `Pull Request`, please report on that `Pull Request` instead.
+        你使用的 QualiaMinigames 版本是什么？版本号在设置页底部，格式为 `x.x.x`。如果你是从某个 `Pull Request` 自行构建的，请到对应的 `Pull Request` 反馈。
+      placeholder: QualiaMinigames version
+    validations:
+      required: true
+
+  - type: input
+    id: android_version
+    attributes:
+      label: OS Version - 操作系统
+      description: |
+        Which Android version do you use? It is in the system settings, and this application supports Android 8.0 and later.
+        你使用的 Android 版本是什么？在系统的设置中可以找到，本应用支持 Android 8.0 及以上。
+      placeholder: e.g. Android 15
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device - 设备型号
+      description: |
+        Which device do you use? The model number is enough. A problem that only appears on one device is usually a layout or a rendering problem.
+        你使用的设备是什么？给出型号即可。只在某台设备上出现的问题，通常是布局或绘制的问题。
+      placeholder: e.g. 2312DRA50C
+    validations:
+      required: true
+
+  - type: textarea
+    id: exist
+    attributes:
+      label: Existing behavior - 现有行为
+      description: |
+        Please describe the problem you have encountered carefully. Screenshots help; a screen recording is better for anything that moves. Please do not only paste a log.
+        请仔细描述你所遇到的问题。截图会有帮助，涉及动画或交互的问题录屏更好。请不要只粘贴日志。
+    validations:
+      required: true
+
+  - type: textarea
+    id: expect
+    attributes:
+      label: Expected behavior - 预期行为
+      description: |
+        Please describe in detail the results you wish to achieve.
+        请仔细描述你要得到的结果。
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: To Reproduce - 复现问题
+      description: |
+        How do you trigger this bug? Please walk us through it step by step, including the game, the parameters and the seed if the board is involved.
+        这个 bug 是怎么触发的？请一步一步详细告诉我们是怎样出现这个情况的，涉及盘面时请包含玩法、参数与种子。
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: know
+    attributes:
+      label: Checks - 检查项
+      options:
+        - label: I have searched the [issue tracker](https://github.com/QualiaMinigames/QualiaMinigames-Android/issues) and confirmed that there is no identical issue. 我已经搜索[问题追踪器](https://github.com/QualiaMinigames/QualiaMinigames-Android/issues)并且确认没有相同的 Issue。
+          required: true
+        - label: I admit that I previously checked all options without thorough verification and directly submitted this Issue, and I agree that it can be closed directly. 我承认此前未充分核实便勾选了所有选项并直接提交此 Issue ，且同意该 Issue 可被直接关闭。
+        - label: I confirm that I am currently using the latest release of QualiaMinigames. If not, this issue can be closed directly. 我确认当前使用的是 QualiaMinigames 的最新版本，若非如此，此 Issue 可被直接关闭。
+          required: true
+        - label: I promise to provide a detailed description of the encountered issue, along with relevant screenshots, rather than offering incomplete or vague information. 我承诺将详细描述遇到的问题，并提供相关截图，而非提供不完整或模糊的信息。
+          required: true
