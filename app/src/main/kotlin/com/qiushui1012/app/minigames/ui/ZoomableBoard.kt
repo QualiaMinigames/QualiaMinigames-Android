@@ -108,9 +108,12 @@ fun ZoomableBoard(
      * The board unit the centre of the first cell falls on.
      *
      * A tap is mapped to a cell through this point rather than through the board's origin, so
-     * a board with a clue margin reports the cell the finger is actually on.
+     * a board with a clue margin reports the cell the finger is actually on. A board whose
+     * cells fill it says nothing: its first cell is drawn from the board's own corner, so its
+     * centre is half a cell in, which is the default. An origin on that corner instead would
+     * read a tap at a cell's centre as the cell beyond it.
      */
-    cellOrigin: Offset = Offset.Zero,
+    cellOrigin: Offset = Offset(cellWidth / 2f, cellHeight / 2f),
     /** Called with the cell under a tap. */
     onTap: (row: Int, column: Int) -> Unit = { _, _ -> },
     /**
