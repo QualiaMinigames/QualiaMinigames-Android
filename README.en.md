@@ -26,7 +26,7 @@ this repository is the interface.
 | Item | Value |
 |---|---|
 | applicationId | `com.qiushui1012.app.minigames` |
-| Version | `0.1.0` (versionCode 1) |
+| Version | `0.3.1` (versionCode 5) |
 | minSdk | 26 |
 | targetSdk | 36 |
 | compileSdk | 35 |

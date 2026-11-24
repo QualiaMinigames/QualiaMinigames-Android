@@ -16,39 +16,16 @@ one Rust core library.
 
 ## 本次内容 / What is in it
 
-- 新增数织：宽与高各自 4~64，单击切换填充、长按切换标 X。某行或某列已无法被线索满足时，
-  该线的线索数字转为警示红。生成器先用随机图案算出线索，再用求解器确认唯一解；八次尝试内
-  找不到唯一解时回退到首个候选，并在棋盘上方持续说明本题可能有多个答案。
-  Nonogram is new: 4 to 64 cells a side, a tap fills a cell and a long press marks it. A row or
-  column whose clue can no longer be met turns its numbers red. The generator draws a pattern,
-  derives the clues and checks that exactly one answer matches them; when eight attempts find
-  none it plays the first one and says above the board that the puzzle may have more than one
-  answer.
-- 新增数桥：宽与高各自 4~35 个格点，岛数为格点数的 10%~35%。单击岛切换玩家自己的已解决
-  斜线，长按后向同行或同列拖动连接两座岛，桥数在 0、1、2 之间循环。生成器先摆岛再用生成树
-  构造隐藏解，线索取各岛度数，只保证有解。
-  Hashi is new: 4 to 35 points a side, with islands covering 10% to 35% of the points. A tap
-  toggles the player's own solved stroke; a long press dragged along a row or a column connects
-  two islands, cycling their bridges through 0, 1 and 2. The generator places the islands, joins
-  them with a spanning tree and takes each island's degree as its clue, which guarantees an
-  answer.
-- 扫雷、数独、数织与数桥四块棋盘的数字统一改用 Cascadia Code，并按字形自身的墨迹居中。
-  The digits of all four boards are now set in Cascadia Code and centred on their own ink.
-- 数独界面底部的数字按钮改为圆角矩形。
-  The digit keys below a sudoku board are rounded rectangles now.
-- 数独的笔记按钮在笔记开启时实心填充、关闭时只留黑色边框，一眼能看出当前模式；清除按钮移到
-  这一行的右端。
-  The sudoku note button is filled while notes are on and outlined while they are off, so the
-  mode is visible at a glance; the erase button has moved to the far end of its row.
-- 数桥允许连出超过岛上限的桥：某座岛的桥数超过它的数字，或剩余方向已经装不下还缺的桥时，
-  该岛的边框、数字与已解决斜线一并转为警示红。
-  Hashi no longer refuses a bridge that carries an island past its clue: an island that has
-  more bridges than its number, or that can no longer fit the bridges it still needs, turns its
-  border, its number and its solved stroke red.
-- 数织点击带 X 的格子先取消 X，再点一次才切换填充。
-  A nonogram click on a marked cell clears the mark first; the next click fills it.
-- 其余功能与 0.2.1 相同：
-  Everything else is what 0.2.1 had:
+- 修复棋盘点击位置与响应格子错位半格的问题：接水管、数独与扫雷三块棋盘的命中判定把棋盘角
+  当成了第一格的中心，点中一格的中心会判到右边或下边相邻的格子，点在最右或最下一格的后半
+  边则没有响应。三块棋盘改为以格心判定，五块棋盘现在共用同一份对齐的判定。
+  Fixed a half-cell offset between where a board is drawn and where a tap is answered: on the
+  pipes, sudoku and minesweeper boards the hit test took the board's corner for the centre of
+  its first cell, so a tap at a cell's centre was answered by the cell to its right or below,
+  and a tap on the far half of the last column or row answered nothing. Those boards now
+  measure from the centre of the cell, and all five boards share one aligned hit test.
+- 其余功能与 0.3.0 相同：
+  Everything else is what 0.3.0 had:
 - 接水管：9～35 格见方，平边与跨边两种布局；点击顺时针、长按逆时针旋转，闭环处管壁转红，水流填充管腔。生成器保证每格最多三臂，不会出现转了也看不出变化的四通管。
   Pipes: 9 to 35 cells a side, flat or wrapped; tap to turn clockwise, long-press anticlockwise. A closed loop turns its walls red, and the water fills the lumen. No cell joins all four sides, so no turn is invisible.
 - 数独：简单、中等、困难三档，笔记模式、行列宫高亮、冲突标红，双指缩放与拖动。
@@ -60,6 +37,27 @@ one Rust core library.
   no-guess. The first click protects a 3 by 3 window (2 by 2 on a narrow board). No-guess
   boards are checked with a counting rule and a subset rule and fall back to normal, saying so
   above the board. Opening a mine ends the game and shows every mine.
+- 数织：宽与高各自 4~64，单击切换填充、长按切换标 X，点击带 X 的格子先取消 X。某行或某列
+  已无法被线索满足时，该线的线索数字转为警示红。生成器先用随机图案算出线索，再用求解器
+  确认唯一解；八次尝试内找不到唯一解时回退到首个候选，并在棋盘上方持续说明本题可能有多
+  个答案。
+  Nonogram: 4 to 64 cells a side, a tap fills a cell and a long press marks it; a click on a
+  marked cell clears the mark first. A row or column whose clue can no longer be met turns its
+  numbers red. The generator draws a pattern, derives the clues and checks that exactly one
+  answer matches them; when eight attempts find none it plays the first one and says above the
+  board that the puzzle may have more than one answer.
+- 数桥：宽与高各自 4~35 个格点，岛数为格点数的 10%~35%。单击岛切换玩家自己的已解决斜线，
+  长按后向同行或同列拖动连接两座岛，桥数在 0、1、2 之间循环。某座岛的桥数超过它的数字，
+  或剩余方向已经装不下还缺的桥时，该岛的边框、数字与已解决斜线一并转为警示红。生成器先
+  摆岛再用生成树构造隐藏解，线索取各岛度数，只保证有解。
+  Hashi: 4 to 35 points a side, with islands covering 10% to 35% of the points. A tap toggles
+  the player's own solved stroke; a long press dragged along a row or a column connects two
+  islands, cycling their bridges through 0, 1 and 2. An island that has more bridges than its
+  number, or that can no longer fit the bridges it still needs, turns its border, its number
+  and its solved stroke red. The generator places the islands, joins them with a spanning tree
+  and takes each island's degree as its clue, which guarantees an answer.
+- 棋盘数字：扫雷、数独、数织与数桥四块棋盘统一用 Cascadia Code，并按字形自身的墨迹居中。
+  Board digits: all four boards are set in Cascadia Code and centred on their own ink.
 - 种子：五款玩法都可填写种子，留空则随机；记录保存最终种子，点开详情可一键复制。
   Seeds: all five games accept a seed and a blank field starts a random game. A record keeps
   its final seed, which the detail dialog copies in one tap.
