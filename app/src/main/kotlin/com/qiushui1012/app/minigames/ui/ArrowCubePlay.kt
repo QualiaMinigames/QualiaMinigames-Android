@@ -256,8 +256,10 @@ fun ArrowCubePlay(
                 gap = result.gap,
                 // A bump moves a block that stays in the board: the faces it shows are the
                 // ones the board leaves exposed, and drawing its covered faces would put them
-                // on the same plane as the neighbours that cover them.
-                faces = faces.filter { it.block == index },
+                // on the same plane as the neighbours that cover them. The list is built from
+                // the occupancy of this moment rather than read from the drawing state, which
+                // the gesture loop captured when it started.
+                faces = ArrowCubeScene.exposedFaces(boardSize, blocks[index], occupancy),
             )
     }
 

@@ -140,15 +140,21 @@ object ArrowCubeScene {
             if (block.removed) {
                 continue
             }
-            val cells = cellCoordinates(block)
-            for (normal in normals) {
-                if (!isExposed(board, cells, normal, occupancy)) {
-                    continue
-                }
-                faces.add(faceOf(block, normal))
-            }
+            faces.addAll(exposedFaces(board, block, occupancy))
         }
         return faces
+    }
+
+    /** Returns the faces of one block that the board leaves exposed. */
+    fun exposedFaces(
+        board: BoardSize,
+        block: ArrowCubeBlock,
+        occupancy: IntArray,
+    ): List<ArrowCubeFace> {
+        val cells = cellCoordinates(block)
+        return normals.mapNotNull { normal ->
+            if (isExposed(board, cells, normal, occupancy)) faceOf(block, normal) else null
+        }
     }
 
     /**
