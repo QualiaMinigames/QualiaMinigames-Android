@@ -22,6 +22,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -86,11 +87,11 @@ fun ArrowCubeNewGameDialog(
     // button is pressed cannot change the board the player is looking at.
     val fallbackSeed = remember { System.currentTimeMillis() }
 
-    var width by remember { mutableStateOf(DEFAULT_SIZE.coerceIn(minimum, maximum)) }
+    var width by remember { mutableIntStateOf(DEFAULT_SIZE.coerceIn(minimum, maximum)) }
     var widthText by remember { mutableStateOf(width.toString()) }
-    var depth by remember { mutableStateOf(DEFAULT_SIZE.coerceIn(minimum, maximum)) }
+    var depth by remember { mutableIntStateOf(DEFAULT_SIZE.coerceIn(minimum, maximum)) }
     var depthText by remember { mutableStateOf(depth.toString()) }
-    var height by remember { mutableStateOf(DEFAULT_SIZE.coerceIn(minimum, maximum)) }
+    var height by remember { mutableIntStateOf(DEFAULT_SIZE.coerceIn(minimum, maximum)) }
     var heightText by remember { mutableStateOf(height.toString()) }
     var playerName by remember { mutableStateOf(settings.playerName) }
     var seedText by remember { mutableStateOf("") }

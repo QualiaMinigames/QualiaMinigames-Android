@@ -73,14 +73,14 @@ fun GameScreen(
     var finished by remember { mutableStateOf(false) }
 
     // A minesweeper board does not exist until its first cell is opened, so its clock waits
-    // for that opening; the other two games time the whole visit. The flag is read from the
+    // for that opening; every other game times the whole visit. The flag is read from the
     // board rather than from a setting, because what says a board has started is the board.
     var started by remember { mutableStateOf(!game.waitsForFirstMove) }
 
     // The mines a game's flags leave unaccounted for, which the header draws beside the clock
-    // for the one game that counts them. It is held here because the header sits above the
-    // board's composition and has to follow a flag the board has just placed; the board
-    // reports every change through the callback below.
+    // for minesweeper. It is held here because the header sits above the board's composition
+    // and has to follow a flag the board has just placed; the board reports every change
+    // through the callback below.
     val minesweeper = game as? GameInProgress.Minesweeper
     var remainingMines by remember(game) { mutableStateOf(minesweeper?.board?.remainingMines ?: 0) }
     var mineCount by remember(game) { mutableStateOf(minesweeper?.board?.mineCount ?: 0) }
@@ -277,11 +277,13 @@ fun GameScreen(
 }
 
 /**
- * The bar above a board: the game's parameters, the player, the clock, the mines left and undo.
+ * The bar above a board: the game's parameters, the player, the clock, the mines left or the
+ * mistakes counted, and undo.
  *
- * [mines] and [mineTotal] are the two numbers the header shows for minesweeper and are null
- * for the games that do not count them, which is why the counter is a slot rather than a
- * second header: the bar is one row and a game that has nothing to put in it leaves it empty.
+ * [mines] and [mineTotal] are the two numbers the header shows for minesweeper, and [mistakes]
+ * is the one it shows for arrow cube; each is null for the games that do not count it, which
+ * is why each counter is a slot rather than a second header: the bar is one row and a game
+ * that has nothing to put in it leaves it empty.
  */
 @Composable
 private fun GameHeader(

@@ -187,6 +187,7 @@ fun ArrowCubePlay(
     // coming back from the background starts a new interval rather than jumping the animation.
     LaunchedEffect(motion) {
         val current = motion ?: return@LaunchedEffect
+        elapsed = 0f
         val startedAt = withFrameNanos { it }
         while (true) {
             val frame = withFrameNanos { it }
@@ -216,10 +217,11 @@ fun ArrowCubePlay(
         if (active is Motion.Flying) {
             return
         }
-        // A bump blocks taps only while the block is away from its place. The flash that
-        // follows outlives the movement, and a player who has seen the block come back may
-        // try again while it is still blinking: a new failure replaces the flash.
-        if (active is Motion.Bumping && elapsed < BUMP_OUT_MILLIS + BUMP_BACK_MILLIS) {
+        // A bump blocks taps only while the block is away from its place, and a block that is
+        // already touching its blocker never leaves its place at all. The flash that follows
+        // outlives the movement, and a player who has seen the block come back may try again
+        // while it is still blinking: a new failure replaces the flash.
+        if (active is Motion.Bumping && active.gap > 0 && elapsed < BUMP_OUT_MILLIS + BUMP_BACK_MILLIS) {
             return
         }
         val current = currentCamera() ?: return
@@ -241,16 +243,21 @@ fun ArrowCubePlay(
                 occupancy[cell] = -1
             }
             facesVersion += 1
+            elapsed = 0f
             motion = Motion.Flying(taken, takenFaces)
             return
         }
         val blockerIndex = result.blocker ?: return
+        elapsed = 0f
         motion =
             Motion.Bumping(
                 block = blocks[index],
                 blocker = blocks[blockerIndex],
                 gap = result.gap,
-                faces = ArrowCubeScene.blockFaces(blocks[index]),
+                // A bump moves a block that stays in the board: the faces it shows are the
+                // ones the board leaves exposed, and drawing its covered faces would put them
+                // on the same plane as the neighbours that cover them.
+                faces = faces.filter { it.block == index },
             )
     }
 
@@ -293,7 +300,7 @@ fun ArrowCubePlay(
                     }
                 }
                 .semantics { contentDescription = description }
-                .pointerInput(board.width, board.depth, board.height, density) {
+                .pointerInput(board.width, board.depth, board.height) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val start = down.position

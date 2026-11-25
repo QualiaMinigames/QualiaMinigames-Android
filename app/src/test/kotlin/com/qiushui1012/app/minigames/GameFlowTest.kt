@@ -482,6 +482,15 @@ class GameFlowTest {
         assertEquals(board.blocks(), resumed.board.blocks())
     }
 
+    @Test
+    fun a_typed_seed_on_an_arrow_cube_reaches_its_play() {
+        val board = requireNotNull(Rules.newArrowCube(5, 5, 5, 4_242))
+        val game = GameInProgress.ArrowCube(board, "QiuShui", 9, typedSeed = true)
+        val group = finished(game.key as ArrowCubeRecord, 9, seed = game.seed, typedSeed = game.typedSeed, mistakes = 0)
+        assertEquals(true, group.history.single().typedSeed)
+        assertEquals(4_242L, group.history.single().seed)
+    }
+
     /** Returns a group's parameters without its plays, for comparing it with a key. */
     private fun GameRecord.keyParameters(): GameRecord =
         when (this) {

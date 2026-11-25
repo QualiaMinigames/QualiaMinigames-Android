@@ -154,12 +154,13 @@ class ArrowCubeMathTest {
         // doubles the offset of both: they end up under fingers that moved apart by the same
         // ratio.
         val base = OrbitCamera(board, viewport, 35f, 30f, fitDistance(board))
-        val corner = Vec3(0f, 0f, 0f)
-        val first = base.project(corner)
         val doubled = base.withDistance(base.distance / 2f)
-        val second = doubled.project(corner)
-        assertClose(2f * (first.x - viewport.centre.x), second.x - viewport.centre.x)
-        assertClose(2f * (first.y - viewport.centre.y), second.y - viewport.centre.y)
+        for (corner in listOf(Vec3(0f, 0f, 0f), Vec3(10f, 10f, 10f))) {
+            val first = base.project(corner)
+            val second = doubled.project(corner)
+            assertClose(2f * (first.x - viewport.centre.x), second.x - viewport.centre.x)
+            assertClose(2f * (first.y - viewport.centre.y), second.y - viewport.centre.y)
+        }
     }
 
     @Test

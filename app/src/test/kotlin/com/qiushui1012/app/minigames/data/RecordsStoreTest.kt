@@ -74,6 +74,37 @@ class RecordsStoreTest {
         )
 
     @Test
+    fun every_game_type_round_trips_through_the_codec() {
+        val groups: List<GameRecord> =
+            listOf(
+                PipesRecord(9, wrapped = true),
+                SudokuRecord("medium"),
+                MinesweeperRecord(9, 9, 10, noGuess = true),
+                NonogramRecord(10, 15),
+                HashiRecord(10, 10, 20),
+                ArrowCubeRecord(10, 8, 6),
+            ).map { group ->
+                group.append(
+                    Play(
+                        playerName = "Tester",
+                        seconds = 42,
+                        finishedAt = 1_000,
+                        failed = group is MinesweeperRecord,
+                        mistakes = if (group is ArrowCubeRecord) 3 else null,
+                    ),
+                )
+            }
+        val file = RecordsFile(groups = groups)
+        val bytes =
+            java.io.ByteArrayOutputStream().also { output ->
+                runBlocking { RecordsSerializer.writeTo(file, output) }
+            }.toByteArray()
+        val read = runBlocking { RecordsSerializer.readFrom(bytes.inputStream()) }
+        assertEquals(groups, read.groups)
+        assertEquals(6, read.groups.map { it.kind }.toSet().size)
+    }
+
+    @Test
     fun an_empty_store_holds_nothing() = runBlocking {
         val store = newStore()
         assertEquals(emptyList<GameRecord>(), store.records.first())
