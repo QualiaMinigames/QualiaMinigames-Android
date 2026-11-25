@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- The cube follows Google's Material Icons deployed_code mark, and the arrows reuse the
+     arrow_left_alt mark; Material Icons is Copyright Google LLC, Apache License 2.0. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72">
   <defs>
     <style>
@@ -8,9 +10,10 @@
   </defs>
   <title>Arrow Cube</title>
   <g id="Layer_1" data-name="Layer 1">
-    <path d="M36 12 L60 25 L36 38 L12 25 Z" class="cls-1"/>
-    <path d="M12 25 L36 38 L36 60 L12 47 Z" class="cls-1"/>
-    <path d="M36 38 L60 25 L60 47 L36 60 Z" class="cls-1"/>
-    <path d="M30.995 23.831 L38.143 27.405 L37.518 28.665 L42.259 28.132 L39.842 24.019 L39.217 25.278 L32.069 21.704 Z" class="cls-2"/>
+    <path d="M36 12 L60 24 L36 36 L12 24 Z" class="cls-1"/>
+    <path d="M12 24 L36 36 L36 60 L12 48 Z" class="cls-1"/>
+    <path d="M36 36 L60 24 L60 48 L36 60 Z" class="cls-1"/>
+    <path d="M44.64 21.82 L44.64 28.32 L31.65 28.32 L31.62 27.17 L40.73 27.17 L26.55 20.08 L28.17 19.28 L42.35 26.37 L42.35 21.81 Z" class="cls-2"/>
+    <path d="M25.91 43.73 L31.68 40.84 L25.91 32.18 L24.87 32.67 L28.92 38.74 L16.32 32.44 L16.32 33.88 L28.92 40.18 L24.87 42.21 Z" class="cls-2"/>
   </g>
 </svg>

@@ -127,12 +127,15 @@ class GameArtTest {
 
     @Test
     fun the_arrow_cube_mark_uses_the_ink_the_surface_and_the_alert() {
-        // The mark is a cube drawn in the file's ink and surface, with one red arrow: a red
-        // that resolved to the ink would take the one coloured fact off the card.
-        val tones = GameArt.of(context, GameKind.ArrowCube).flatMap { listOfNotNull(it.fill, it.stroke) }.toSet()
+        // The mark is a cube drawn in the file's ink and surface, with a red arrow on the top
+        // face and one on the lower-left face: a red that resolved to the ink would take the
+        // coloured fact off the card.
+        val bands = GameArt.of(context, GameKind.ArrowCube)
+        val tones = bands.flatMap { listOfNotNull(it.fill, it.stroke) }.toSet()
         assertTrue("the arrow cube mark never paints the ink", GameArt.Tone.Ink in tones)
         assertTrue("the arrow cube mark never paints the surface", GameArt.Tone.Surface in tones)
         assertTrue("the arrow cube mark never paints the alert", GameArt.Tone.Alert in tones)
+        assertEquals("the arrow cube mark draws two arrows", 2, bands.count { it.fill == GameArt.Tone.Alert })
         assertTrue("the arrow cube mark paints a tone it does not use", GameArt.Tone.Neutral !in tones)
     }
 

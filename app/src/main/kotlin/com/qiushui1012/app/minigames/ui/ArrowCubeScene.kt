@@ -158,6 +158,50 @@ object ArrowCubeScene {
     }
 
     /**
+     * Returns the faces a bumping block uncovers while it is away from its cells.
+     *
+     * A bump does not remove the block from the board, so the board's own face list still has
+     * the neighbours covered by it. While the block is displaced, those neighbours look into
+     * the slot the block left, and the faces around that slot have to be drawn or the player
+     * sees through the block to whatever is behind it. The faces are the ones facing the slot,
+     * which is the opposite of the direction from the slot to the neighbour.
+     */
+    fun cavityFaces(
+        board: BoardSize,
+        block: ArrowCubeBlock,
+        blocks: List<ArrowCubeBlock>,
+        occupancy: IntArray,
+    ): List<ArrowCubeFace> {
+        val faces = ArrayList<ArrowCubeFace>()
+        val seen = HashSet<Pair<Int, Vec3>>()
+        for ((x, y, z) in cellCoordinates(block)) {
+            for (normal in normals) {
+                val nx = x + normal.x.toInt()
+                val ny = y + normal.y.toInt()
+                val nz = z + normal.z.toInt()
+                if (nx !in 0 until board.width || ny !in 0 until board.depth || nz !in 0 until board.height) {
+                    continue
+                }
+                val occupant = occupancy[nx + board.width * (ny + board.depth * nz)]
+                if (occupant < 0 || occupant == block.index) {
+                    continue
+                }
+                val facing = normal * -1f
+                // A long neighbour face that is already exposed through another cell is in the
+                // board's face list as one whole quad; adding the same quad again would draw its
+                // outline twice.
+                if (isExposed(board, cellCoordinates(blocks[occupant]), facing, occupancy)) {
+                    continue
+                }
+                if (seen.add(occupant to facing)) {
+                    faces.add(faceOf(blocks[occupant], facing))
+                }
+            }
+        }
+        return faces
+    }
+
+    /**
      * Returns all six faces of a block, whether or not the board covers them.
      *
      * This is what an animation draws: a block that is leaving its place is no longer covered
@@ -220,30 +264,35 @@ object ArrowCubeScene {
             .toList()
 
     /**
-     * Returns the seven points of an arrow on a face, in board space.
+     * Returns the nine points of an arrow on a face, in board space.
      *
-     * The polygon is a shaft with two wings: the tail, the two corners where the head starts,
-     * the two wing tips and the point. The tail and the tip are measured along the arrow's
-     * direction from the face's centre; the wings are measured across it. The values are the
-     * proportions the release plan fixes, so an arrow on a one-cell face keeps its shape on a
-     * two-cell face by being measured against the face's own long extent.
+     * The shape is the Material Icons arrow (`arrow_left_alt`), pointing along the arrow's
+     * direction in the face plane. The head keeps the icon's proportions; a two-cell face
+     * lengthens the shaft instead of stretching the head, so a long block reads as the same
+     * arrow with more tail. The points are the icon's outline measured in face units, so a
+     * one-cell face carries the whole arrow and a two-cell face carries a longer shaft.
      */
     fun decalPoints(face: ArrowCubeFace): List<Vec3> {
         val decal = face.decal ?: return emptyList()
         val centre = face.corners.reduce(Vec3::plus) * 0.25f
         val along = directionVector(decal.direction)
-        val length = decal.length.toFloat()
-        val shape =
-            listOf(
-                -0.38f * length to -0.07f,
-                0.10f * length to -0.07f,
-                0.10f * length to -0.22f,
-                0.40f * length to 0f,
-                0.10f * length to 0.22f,
-                0.10f * length to 0.07f,
-                -0.38f * length to 0.07f,
-            )
-        return shape.map { (u, v) -> centre + along * u + decal.across * v }
+        val extension = ARROW_HALF_LENGTH * (decal.length - 1)
+        return arrowOutline(decal.length).map { (u, v) ->
+            centre + along * (u + extension) + decal.across * v
+        }
+    }
+
+    /** Returns the points of the arrow outline for a face that is [cells] cells long. */
+    private fun arrowOutline(cells: Int): List<Pair<Float, Float>> {
+        val extension = ARROW_HALF_LENGTH * (cells - 1)
+        return ARROW_ICON.mapIndexed { index, (u, v) ->
+            val tail = index == ARROW_TAIL_UPPER || index == ARROW_TAIL_LOWER
+            if (tail) {
+                -ARROW_HALF_LENGTH * cells to v
+            } else {
+                u + extension to v
+            }
+        }
     }
 
     /** Returns a copy of a face whose corners have been moved by an offset. */
@@ -388,3 +437,36 @@ object ArrowCubeScene {
     /** The longest side of a board, used by the animation to fly a block out of the view. */
     fun flyDistance(board: BoardSize): Float = max(board.radius * 2f, 4f * board.longestSide) + 2f
 }
+
+/**
+ * The outline of Google's Material Icons `arrow_left_alt`, in face units, pointing along +u.
+ *
+ * The points are the icon's own path measured from the middle of its box and scaled so the
+ * arrow is 0.8 of a one-cell face long, with the icon's proportions kept. The two tail points
+ * (indices 5 and 6) are the only ones a longer face moves; the head and the points where the
+ * shaft meets it keep the icon's shape, so a long block gets a longer shaft rather than a
+ * stretched head.
+ *
+ * Material Icons is Copyright Google LLC and licensed under Apache License 2.0.
+ */
+private val ARROW_ICON =
+    listOf(
+        0.09922f to 0.30078f,
+        0.40000f to 0f,
+        0.09922f to -0.30078f,
+        0.04555f to -0.24837f,
+        0.25648f to -0.03744f,
+        -0.40000f to -0.03744f,
+        -0.40000f to 0.03744f,
+        0.25648f to 0.03744f,
+        0.04555f to 0.24837f,
+    )
+
+/** The distance from the centre to the tip of a one-cell arrow. */
+private const val ARROW_HALF_LENGTH = 0.4f
+
+/** The index of the first tail corner, which a longer face moves backwards. */
+private const val ARROW_TAIL_UPPER = 5
+
+/** The index of the second tail corner, which a longer face moves backwards. */
+private const val ARROW_TAIL_LOWER = 6

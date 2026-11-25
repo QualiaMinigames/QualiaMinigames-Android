@@ -57,13 +57,16 @@ import kotlin.math.max
 import kotlin.math.sin
 
 /** How long a taken block flies out, in milliseconds. */
-private const val FLY_MILLIS = 260f
+private const val FLY_MILLIS = 780f
 
 /** How long a blocked block travels towards its blocker, in milliseconds. */
-private const val BUMP_OUT_MILLIS = 250f
+private const val BUMP_OUT_MILLIS = 50f
 
 /** How long a blocked block takes to return, in milliseconds. */
-private const val BUMP_BACK_MILLIS = 350f
+private const val BUMP_BACK_MILLIS = 75f
+
+/** How wide the shadow band of the three-dimensional board is, in dp. */
+private const val ARROW_SHADOW_DP = 20f
 
 /** How long one red flash lasts, in milliseconds. */
 private const val FLASH_PERIOD_MILLIS = 500f
@@ -85,7 +88,7 @@ private sealed interface Motion {
     /** The block the animation is about. */
     val block: ArrowCubeBlock
 
-    /** The faces of the block while it was still in the board. */
+    /** The faces of the block while it moves, all six so the camera can cull them each frame. */
     val faces: List<ArrowCubeFace>
 
     /** How long the whole animation lasts, in milliseconds. */
@@ -94,7 +97,7 @@ private sealed interface Motion {
     /** A block leaving the board after a successful take. */
     data class Flying(
         override val block: ArrowCubeBlock,
-        /** The faces the block had while it was still in the board. */
+        /** The six faces the block had while it was still in the board. */
         override val faces: List<ArrowCubeFace>,
     ) : Motion {
         override val durationMillis: Float = FLY_MILLIS
@@ -107,8 +110,10 @@ private sealed interface Motion {
         val blocker: ArrowCubeBlock,
         /** How many empty cells lie between the two. */
         val gap: Int,
-        /** The faces of the blocked block. */
+        /** All six faces of the blocked block. */
         override val faces: List<ArrowCubeFace>,
+        /** The faces the slot left by the block uncovers while it is away. */
+        val cavity: List<ArrowCubeFace>,
     ) : Motion {
         override val durationMillis: Float = max(BUMP_OUT_MILLIS + BUMP_BACK_MILLIS, FLASH_PERIOD_MILLIS * FLASH_CYCLES)
     }
@@ -170,7 +175,12 @@ fun ArrowCubePlay(
     val outline = MaterialTheme.colorScheme.outline
     val arrowColor = MaterialTheme.colorScheme.onSurface
     val flashColor = if (dark) AlertDark else AlertLight
-    val shadowColor = if (dark) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.12f)
+    val shadowColor =
+        if (dark) {
+            Color.White.copy(alpha = 0.07f)
+        } else {
+            Color.Black.copy(alpha = 0.08f)
+        }
     val description = stringResource(R.string.cd_arrow_cube_board)
     val flyDistance = remember(boardSize) { ArrowCubeScene.flyDistance(boardSize) }
 
@@ -254,12 +264,18 @@ fun ArrowCubePlay(
                 block = blocks[index],
                 blocker = blocks[blockerIndex],
                 gap = result.gap,
-                // A bump moves a block that stays in the board: the faces it shows are the
-                // ones the board leaves exposed, and drawing its covered faces would put them
-                // on the same plane as the neighbours that cover them. The list is built from
-                // the occupancy of this moment rather than read from the drawing state, which
-                // the gesture loop captured when it started.
-                faces = ArrowCubeScene.exposedFaces(boardSize, blocks[index], occupancy),
+                // A moving block turns, because the camera may keep turning while it moves. All
+                // six faces are kept here so the back-face pass can choose the visible ones
+                // every frame; keeping only the faces that were exposed before the bump would
+                // let the player see through the block once it leaves the neighbours that hid
+                // its sides.
+                faces = ArrowCubeScene.blockFaces(blocks[index]),
+                cavity =
+                    if (result.gap > 0) {
+                        ArrowCubeScene.cavityFaces(boardSize, blocks[index], blocks, occupancy)
+                    } else {
+                        emptyList()
+                    },
             )
     }
 
@@ -278,7 +294,7 @@ fun ArrowCubePlay(
         lastSpacing: Float,
     ) {
         val centreDp = ScreenPoint(centreDelta.x / density, centreDelta.y / density)
-        yaw = wrapDegrees(yaw + centreDp.x * ROTATE_PER_DP)
+        yaw = wrapDegrees(yaw - centreDp.x * ROTATE_PER_DP)
         pitch = clampPitch(pitch + centreDp.y * ROTATE_PER_DP)
         val minimum = minDistance(boardSize, yaw, pitch)
         if (spacing >= PINCH_SLOP_DP * density && lastSpacing >= PINCH_SLOP_DP * density) {
@@ -374,12 +390,19 @@ fun ArrowCubePlay(
 
         val active = motion
         val offset = offsetOf(active, elapsed, flyDistance)
+        // A bump with no gap does not leave its cell, so its faces stay in the static list and
+        // the flash is painted over them. A bump with a gap and a take both move the block: its
+        // six faces are culled again with the camera of this frame, which is what keeps a turn
+        // during the animation from exposing the blocks behind it.
+        val drawMoving = active is Motion.Flying || (active is Motion.Bumping && active.gap > 0)
+        val movingBlock = if (drawMoving) active?.block?.index else null
+        val cavity = (active as? Motion.Bumping)?.takeIf { it.gap > 0 }?.cavity.orEmpty()
         val staticFaces =
-            ArrowCubeScene.visibleFaces(faces, current).filter { face ->
-                active == null || face.face.block != active.block.index
+            ArrowCubeScene.visibleFaces(faces + cavity, current).filter { face ->
+                movingBlock == null || face.face.block != movingBlock
             }
         val movedFaces =
-            if (active == null) {
+            if (!drawMoving || active == null) {
                 emptyList()
             } else {
                 ArrowCubeScene.visibleFaces(
@@ -439,7 +462,7 @@ fun ArrowCubePlay(
                 drawnWidth = right - left,
                 drawnHeight = bottom - top,
                 color = shadowColor,
-                thickness = EDGE_SHADOW_DP.dp.toPx(),
+                thickness = ARROW_SHADOW_DP.dp.toPx(),
             )
         }
     }
