@@ -30,46 +30,197 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 
 /**
  * Everything the application keeps between runs, apart from the settings.
  *
- * One file rather than two: a record and the game that produced it are written at the same
- * moment, and two files that are written together can disagree after a crash in between.
+ * One file rather than two: a record group and the game that produced it are written at the
+ * same moment, and two files that are written together can disagree after a crash in between.
  * The snapshot of an unfinished game is the largest field, so a record written on top of it
  * keeps the file small.
  */
 @kotlinx.serialization.Serializable
 data class RecordsFile(
-    /** Every finished game, oldest first. */
-    val records: List<Record> = emptyList(),
+    /** Every finished game's group, one per set of parameters. */
+    val groups: List<GameRecord> = emptyList(),
     /** The unfinished games, at most one per game. */
     val saves: List<SavedGame> = emptyList(),
 )
 
 /** The JSON the records are stored as. */
-private val json = Json {
-    // A field this build does not know is kept rather than dropped, so that a file written
-    // by a newer build survives a downgrade with its data intact.
-    ignoreUnknownKeys = true
-    encodeDefaults = true
-}
+private val json =
+    Json {
+        // A field this build does not know is kept rather than dropped, so that a file written
+        // by a newer build survives a downgrade with its data intact.
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+        // The type of a record group is part of the format rather than a default that could
+        // shift with the library: a reader looks for `type` and a writer states it.
+        classDiscriminator = "type"
+    }
+
+/**
+ * The records file as the previous model wrote it.
+ *
+ * It exists only to read a file this build no longer writes. The key is decoded as one flat
+ * object rather than as a sealed hierarchy with the old class names, because the discriminator
+ * holds a fully qualified class name that is not part of this build's interface: matching the
+ * simple name lets both spellings read, and keeps the old type names out of the public model.
+ */
+@kotlinx.serialization.Serializable
+private data class LegacyRecordsFile(
+    /** The finished games, oldest first, one entry per play. */
+    val records: List<LegacyRecord> = emptyList(),
+    /** The unfinished games, which keep their shape. */
+    val saves: List<SavedGame> = emptyList(),
+)
+
+/** One play as the previous model wrote it. */
+@kotlinx.serialization.Serializable
+private data class LegacyRecord(
+    /** The game and its parameters. */
+    val key: LegacyRecordKey,
+    /** The name the player played under. */
+    val playerName: String,
+    /** How long the game took, in whole seconds. */
+    val seconds: Long,
+    /** When it finished, as milliseconds since the Unix epoch. */
+    val finishedAt: Long,
+    /** The seed, or null for a play older than the field. */
+    val seed: Long? = null,
+    /** Whether the game was lost, or null for a play older than the field. */
+    val failed: Boolean? = null,
+    /** Whether the seed was typed. */
+    val typedSeed: Boolean = false,
+)
+
+/**
+ * The parameters of an old record, with every game's fields in one object.
+ *
+ * All the fields are nullable because one object describes five different keys; the fields a
+ * key does not use are absent from its JSON.
+ */
+@kotlinx.serialization.Serializable
+private data class LegacyRecordKey(
+    /** The old class name, which is the discriminator and the only field every key has. */
+    val type: String,
+    /** The side of a pipes board. */
+    val size: Int? = null,
+    /** Whether a pipes board was wrapped. */
+    val wrapped: Boolean? = null,
+    /** The difficulty of a sudoku. */
+    val difficulty: String? = null,
+    /** The width of a minesweeper, nonogram or hashi board. */
+    val width: Int? = null,
+    /** The height of a minesweeper, nonogram or hashi board. */
+    val height: Int? = null,
+    /** The mines of a minesweeper board. */
+    val mines: Int? = null,
+    /** Whether a minesweeper board used the no-guess rules. */
+    val noGuess: Boolean? = null,
+    /** The islands of a hashi board. */
+    val islands: Int? = null,
+)
 
 /** Writes and reads [RecordsFile]. */
 object RecordsSerializer : Serializer<RecordsFile> {
     override val defaultValue: RecordsFile = RecordsFile()
 
-    override suspend fun readFrom(input: InputStream): RecordsFile =
-        try {
-            json.decodeFromString(RecordsFile.serializer(), input.readBytes().decodeToString())
+    override suspend fun readFrom(input: InputStream): RecordsFile {
+        val text = input.readBytes().decodeToString()
+        return try {
+            val element = json.parseToJsonElement(text).jsonObject
+            if ("groups" in element) {
+                val file = json.decodeFromJsonElement(RecordsFile.serializer(), element)
+                // The best score can be derived from the history, so a file whose stored value
+                // disagrees with its own plays is corrected on the way in rather than shown.
+                file.copy(groups = file.groups.map { it.recomputeBest() })
+            } else {
+                // A file with no `groups` is one the previous model wrote. It is migrated in
+                // memory and written back in the new shape on the next write, which is what
+                // keeps the old file readable until something replaces it.
+                val legacy = json.decodeFromJsonElement(LegacyRecordsFile.serializer(), element)
+                RecordsFile(groups = migrate(legacy.records), saves = legacy.saves)
+            }
         } catch (failure: SerializationException) {
             throw CorruptionException("The records file is not valid JSON.", failure)
+        } catch (failure: IllegalArgumentException) {
+            throw CorruptionException("The records file is not valid JSON.", failure)
         }
+    }
 
-    override suspend fun writeTo(t: RecordsFile, output: OutputStream) {
+    override suspend fun writeTo(
+        t: RecordsFile,
+        output: OutputStream,
+    ) {
         output.write(json.encodeToString(RecordsFile.serializer(), t).encodeToByteArray())
     }
 }
+
+/**
+ * Groups the plays of an old file into the new records.
+ *
+ * The old file held one entry per play, so the same board appeared once per game; the new
+ * model holds one entry per board with its plays inside. Grouping by the new key and appending
+ * each play is what merges them, and [GameRecord.append] recomputes the best score as it goes,
+ * so a migrated group and a group written by this build are the same value.
+ */
+private fun migrate(records: List<LegacyRecord>): List<GameRecord> {
+    val groups = LinkedHashMap<String, GameRecord>()
+    for (record in records) {
+        val group = record.key.toRecord()
+        val play =
+            Play(
+                playerName = record.playerName,
+                seconds = record.seconds,
+                finishedAt = record.finishedAt,
+                seed = record.seed,
+                failed = record.failed,
+                typedSeed = record.typedSeed,
+            )
+        val key = group.groupKey()
+        groups[key] = (groups[key] ?: group).append(play)
+    }
+    return groups.values.toList()
+}
+
+/** Converts one old key into the typed record group of the game it names. */
+private fun LegacyRecordKey.toRecord(): GameRecord {
+    // The old discriminator is the class name, which the serialization library may spell with
+    // dots or with the module's own separator before the nested class. Taking the last segment
+    // after either keeps the reader independent of that spelling.
+    val name =
+        type
+            .lowercase()
+            .substringAfterLast('.')
+            .substringAfterLast('$')
+    return when (name) {
+        "pipes" -> PipesRecord(size = size ?: missing("size"), wrapped = wrapped ?: false)
+        "sudoku" -> SudokuRecord(difficulty = difficulty ?: missing("difficulty"))
+        "minesweeper" ->
+            MinesweeperRecord(
+                width = width ?: missing("width"),
+                height = height ?: missing("height"),
+                mines = mines ?: missing("mines"),
+                noGuess = noGuess ?: false,
+            )
+
+        "nonogram" -> NonogramRecord(width = width ?: missing("width"), height = height ?: missing("height"))
+        "hashi" ->
+            HashiRecord(
+                width = width ?: missing("width"),
+                height = height ?: missing("height"),
+                islands = islands ?: missing("islands"),
+            )
+
+        else -> throw SerializationException("The records file names an unknown game: $type")
+    }
+}
+
+/** Reports a field an old record is missing. */
+private fun missing(field: String): Nothing =
+    throw SerializationException("The records file is missing a record's $field")
 
 /**
  * The records and the saved games, stored in a DataStore.
@@ -80,8 +231,8 @@ object RecordsSerializer : Serializer<RecordsFile> {
  * replacement is done by the DataStore, which also keeps the corrupt file aside.
  */
 class RecordsStore(private val store: DataStore<RecordsFile>) {
-    /** Every finished game, oldest first. */
-    val records: Flow<List<Record>> = store.data.map { it.records }
+    /** Every finished game's group, in the order the records page shows them. */
+    val records: Flow<List<GameRecord>> = store.data.map { it.groups.sortedRecords() }
 
     /** The unfinished games. */
     val saves: Flow<List<SavedGame>> = store.data.map { it.saves }
@@ -90,28 +241,32 @@ class RecordsStore(private val store: DataStore<RecordsFile>) {
     fun save(kind: GameKind): Flow<SavedGame?> = store.data.map { file -> file.saves.firstOrNull { it.kind == kind } }
 
     /**
-     * Returns the best time of a key, in whole seconds.
+     * Adds one play and clears the save of the game it belongs to.
      *
-     * Only finished games count: a lost game has a time, but it is the time until the mine was
-     * opened, and comparing it with a cleared board would make losing the way to a best time.
+     * The incoming group is the one the screen built from the game's parameters, and its
+     * history holds the one play that just finished. A group of the same parameters is
+     * appended to rather than replaced, and its best score is recomputed from the merged
+     * history; a group of new parameters starts on its own.
      */
-    fun best(key: RecordKey): Flow<Long?> =
-        store.data.map { file -> file.records.filter { it.key == key && it.failed != true }.minOfOrNull { it.seconds } }
-
-    /** Adds a finished game and clears the save of the game it belongs to. */
-    suspend fun addRecord(record: Record) {
-        val kind =
-            when (record.key) {
-                is RecordKey.Pipes -> GameKind.Pipes
-                is RecordKey.Sudoku -> GameKind.Sudoku
-                is RecordKey.Minesweeper -> GameKind.Minesweeper
-                is RecordKey.Nonogram -> GameKind.Nonogram
-                is RecordKey.Hashi -> GameKind.Hashi
-            }
+    suspend fun addPlay(record: GameRecord) {
+        val play = record.history.lastOrNull() ?: return
         store.updateData { file ->
+            val existing = file.groups.firstOrNull { it.groupKey() == record.groupKey() }
+            val groups =
+                if (existing == null) {
+                    file.groups + record.recomputeBest()
+                } else {
+                    file.groups.map { group ->
+                        if (group.groupKey() == record.groupKey()) {
+                            group.append(play)
+                        } else {
+                            group
+                        }
+                    }
+                }
             file.copy(
-                records = file.records + record,
-                saves = file.saves.filterNot { it.kind == kind },
+                groups = groups,
+                saves = file.saves.filterNot { it.kind == record.kind },
             )
         }
     }
@@ -129,9 +284,31 @@ class RecordsStore(private val store: DataStore<RecordsFile>) {
         store.updateData { file -> file.copy(saves = file.saves.filterNot { it.kind == kind }) }
     }
 
-    /** Removes the records with the given identifiers. */
-    suspend fun delete(ids: Set<String>) {
-        store.updateData { file -> file.copy(records = file.records.filterNot { it.id() in ids }) }
+    /**
+     * Removes the selected plays.
+     *
+     * A group whose history empties is removed with its last play: a card that says no game
+     * was played is a card that says nothing. A group that keeps plays recomputes its best
+     * score, because the best play may be the one that was deleted.
+     */
+    suspend fun delete(refs: Set<PlayRef>) {
+        store.updateData { file ->
+            file.copy(
+                groups =
+                    file.groups.mapNotNull { group ->
+                        val key = group.groupKey()
+                        val remaining =
+                            group.history.filterNot { play ->
+                                PlayRef(key, play.finishedAt, play.seconds) in refs
+                            }
+                        when {
+                            remaining.size == group.history.size -> group
+                            remaining.isEmpty() -> null
+                            else -> group.withHistory(remaining)
+                        }
+                    },
+            )
+        }
     }
 
     /**
@@ -141,7 +318,7 @@ class RecordsStore(private val store: DataStore<RecordsFile>) {
      * game in progress is not a record yet.
      */
     suspend fun deleteAllRecords() {
-        store.updateData { it.copy(records = emptyList()) }
+        store.updateData { it.copy(groups = emptyList()) }
     }
 }
 

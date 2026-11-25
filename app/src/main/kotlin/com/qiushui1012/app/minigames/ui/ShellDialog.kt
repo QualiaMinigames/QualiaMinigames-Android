@@ -21,7 +21,9 @@ import com.qiushui1012.app.minigames.AppContainer
 import com.qiushui1012.app.minigames.GameInProgress
 import com.qiushui1012.app.minigames.R
 import com.qiushui1012.app.minigames.data.GameKind
-import com.qiushui1012.app.minigames.data.Record
+import com.qiushui1012.app.minigames.data.GameRecord
+import com.qiushui1012.app.minigames.data.Play
+import com.qiushui1012.app.minigames.data.PlayRef
 import com.qiushui1012.app.minigames.data.Settings
 import kotlinx.coroutines.launch
 
@@ -43,17 +45,17 @@ sealed interface ShellDialog {
     /** The warning that a new game would discard the one in progress. */
     data class DiscardSave(val kind: GameKind) : ShellDialog
 
-    /** One record, in full. */
-    data class RecordDetail(val record: Record) : ShellDialog
+    /** One play, in full, with the group that names its parameters. */
+    data class RecordDetail(val group: GameRecord, val play: Play) : ShellDialog
 
     /**
-     * The question that comes before some records are deleted.
+     * The question that comes before some plays are deleted.
      *
-     * It carries the identifiers the player selected rather than reading them from the page:
-     * a confirmation is a question about a particular set of records, and a set that changed
+     * It carries the identities the player selected rather than reading them from the page:
+     * a confirmation is a question about a particular set of plays, and a set that changed
      * between the question and the answer would delete something nobody agreed to.
      */
-    data class DeleteRecords(val ids: Set<String>) : ShellDialog
+    data class DeleteRecords(val refs: Set<PlayRef>) : ShellDialog
 
     /** The question that comes before every record is deleted. */
     data object ClearRecords : ShellDialog
@@ -132,6 +134,17 @@ fun ShellDialogContent(
                             onStartGame(it)
                         },
                     )
+
+                GameKind.ArrowCube ->
+                    ArrowCubeNewGameDialog(
+                        container = container,
+                        settings = settings,
+                        onDismiss = onDismiss,
+                        onStart = {
+                            onDismiss()
+                            onStartGame(it)
+                        },
+                    )
             }
 
         is ShellDialog.DiscardSave ->
@@ -140,13 +153,14 @@ fun ShellDialogContent(
                 onDismiss = onDismiss,
             )
 
-        is ShellDialog.RecordDetail -> RecordDetailDialog(record = dialog.record, onDismiss = onDismiss)
+        is ShellDialog.RecordDetail ->
+            RecordDetailDialog(group = dialog.group, play = dialog.play, onDismiss = onDismiss)
 
         is ShellDialog.DeleteRecords ->
             DeleteRecordsDialog(
-                count = dialog.ids.size,
+                count = dialog.refs.size,
                 onConfirm = {
-                    container.scope.launch { container.records.delete(dialog.ids) }
+                    container.scope.launch { container.records.delete(dialog.refs) }
                     onDismiss()
                 },
                 onDismiss = onDismiss,

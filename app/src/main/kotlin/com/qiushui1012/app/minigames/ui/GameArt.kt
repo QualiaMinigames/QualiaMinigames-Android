@@ -22,15 +22,15 @@ import com.qiushui1012.app.minigames.data.GameKind
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * The drawings of the three games, read from the SVGs in `assets/`.
+ * The drawings of the games, read from the SVGs in `assets/`.
  *
  * # What the files hold
  *
- * `pipes.svg`, `sudoku.svg` and `minesweeper.svg` are the marks of the games themselves: filled
- * shapes on a 72-unit square, with white where the mark leaves a gap. A class in the files'
- * `<style>` block says which is which, and a path is painted in the colour its class declares,
- * so a mark that is edited in a drawing program changes here without a second record of its
- * geometry.
+ * `pipes.svg`, `sudoku.svg`, `minesweeper.svg`, `nonogram.svg`, `hashi.svg` and `arrowcube.svg`
+ * are the marks of the games themselves: filled shapes on a 72-unit square, with white where
+ * the mark leaves a gap. A class in the files' `<style>` block says which is which, and a path
+ * is painted in the colour its class declares, so a mark that is edited in a drawing program
+ * changes here without a second record of its geometry.
  *
  * # Why the colours come from the caller
  *
@@ -92,6 +92,7 @@ object GameArt {
             GameKind.Minesweeper -> "minesweeper.svg"
             GameKind.Nonogram -> "nonogram.svg"
             GameKind.Hashi -> "hashi.svg"
+            GameKind.ArrowCube -> "arrowcube.svg"
         }
 
     /** The drawings, once per process: parsing a file per frame would be absurd. */

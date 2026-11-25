@@ -338,11 +338,12 @@ fun MinesweeperNewGameDialog(
     }
 }
 
-/** The seed field the three dialogs share, so its label and hint cannot drift apart. */
+/** The seed field the game dialogs share, so its label and hint cannot drift apart. */
 @Composable
 fun SeedField(
     value: String,
     onValueChange: (String) -> Unit,
+    enabled: Boolean = true,
 ) {
     OutlinedTextField(
         value = value,
@@ -350,6 +351,7 @@ fun SeedField(
         label = { Text(stringResource(R.string.dialog_seed)) },
         placeholder = { Text(stringResource(R.string.dialog_seed_hint)) },
         singleLine = true,
+        enabled = enabled,
         modifier = Modifier.fillMaxWidth(),
     )
 }

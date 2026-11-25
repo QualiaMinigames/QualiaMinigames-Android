@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72">
+  <defs>
+    <style>
+      .cls-1{fill:#ffffff;stroke:#000000;stroke-width:2;stroke-miterlimit:10}
+      .cls-2{fill:#de3a54}
+    </style>
+  </defs>
+  <title>Arrow Cube</title>
+  <g id="Layer_1" data-name="Layer 1">
+    <path d="M36 12 L60 25 L36 38 L12 25 Z" class="cls-1"/>
+    <path d="M12 25 L36 38 L36 60 L12 47 Z" class="cls-1"/>
+    <path d="M36 38 L60 25 L60 47 L36 60 Z" class="cls-1"/>
+    <path d="M30.995 23.831 L38.143 27.405 L37.518 28.665 L42.259 28.132 L39.842 24.019 L39.217 25.278 L32.069 21.704 Z" class="cls-2"/>
+  </g>
+</svg>

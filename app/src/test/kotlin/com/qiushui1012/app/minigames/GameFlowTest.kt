@@ -16,13 +16,21 @@ package com.qiushui1012.app.minigames
 
 import androidx.datastore.core.DataStore
 import android.graphics.Typeface
+import com.qiushui1012.app.minigames.data.ArrowCubeRecord
 import com.qiushui1012.app.minigames.data.GameKind
-import com.qiushui1012.app.minigames.data.Record
-import com.qiushui1012.app.minigames.data.RecordKey
+import com.qiushui1012.app.minigames.data.GameRecord
+import com.qiushui1012.app.minigames.data.HashiRecord
+import com.qiushui1012.app.minigames.data.MinesweeperRecord
+import com.qiushui1012.app.minigames.data.NonogramRecord
+import com.qiushui1012.app.minigames.data.PipesRecord
+import com.qiushui1012.app.minigames.data.Play
 import com.qiushui1012.app.minigames.data.RecordsFile
 import com.qiushui1012.app.minigames.data.RecordsStore
 import com.qiushui1012.app.minigames.data.SavedGame
+import com.qiushui1012.app.minigames.data.SudokuRecord
+import com.qiushui1012.app.minigames.data.append
 import com.qiushui1012.app.minigames.export.RecordImage
+import com.qiushui1012.app.minigames.rules.ArrowCubeBoard
 import com.qiushui1012.app.minigames.rules.MinesweeperCell
 import com.qiushui1012.app.minigames.rules.MinesweeperEvent
 import com.qiushui1012.app.minigames.rules.MinesweeperMode
@@ -65,13 +73,39 @@ private class MemoryStore : DataStore<RecordsFile> {
  *
  * Nothing here reads a solution out of the library: the interface does not expose one, and a
  * test that asked for it would be asking for a way to cheat. A sudoku is solved the way its
- * own rules allow — by entering digits until the board reports itself solved.
+ * own rules allow — by entering digits until the board reports itself solved — and an arrow
+ * cube is taken apart by tapping blocks until the board is empty.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class GameFlowTest {
     /** Returns a store over an empty in-memory DataStore. */
     private fun newStore(): RecordsStore = RecordsStore(MemoryStore())
+
+    /** Returns a group with one play in it, the way a finished screen builds one. */
+    private fun <T : GameRecord> finished(
+        key: T,
+        seconds: Long,
+        player: String = "QiuShui",
+        seed: Long? = null,
+        failed: Boolean? = null,
+        typedSeed: Boolean = false,
+        mistakes: Int? = null,
+        finishedAt: Long = 2_000,
+    ): T {
+        val play =
+            Play(
+                playerName = player,
+                seconds = seconds,
+                finishedAt = finishedAt,
+                seed = seed,
+                failed = failed,
+                typedSeed = typedSeed,
+                mistakes = mistakes,
+            )
+        @Suppress("UNCHECKED_CAST")
+        return key.append(play) as T
+    }
 
     /**
      * Solves a sudoku by trying digits and backing out of a dead end.
@@ -98,6 +132,33 @@ class GameFlowTest {
         return place(0)
     }
 
+    /**
+     * Takes an arrow cube apart by tapping blocks, the way a player does.
+     *
+     * The scan tries every block in turn and counts the refusals as mistakes, which is also
+     * what the core counts. A board that offers nothing at all is a failure rather than an
+     * empty loop, because the generator promises a solvable board.
+     */
+    private fun solveArrowCube(board: ArrowCubeBoard): Int {
+        var refused = 0
+        while (!board.isSolved()) {
+            var taken = false
+            for (index in 0 until board.blockCount) {
+                val result = board.take(index)
+                if (result.removed) {
+                    taken = true
+                    break
+                }
+                if (result.blocker != null) {
+                    refused += 1
+                }
+            }
+            assertTrue("a generated arrow cube board always offers a block", taken)
+        }
+        assertEquals(refused, board.mistakes)
+        return refused
+    }
+
     @Test
     fun a_sudoku_can_be_played_to_a_finish_through_its_own_moves() {
         val board = Rules.newSudoku(SudokuDifficulty.Easy, 4_242)
@@ -106,22 +167,20 @@ class GameFlowTest {
     }
 
     @Test
-    fun finishing_a_pipes_game_writes_a_record_and_clears_its_save() = runBlocking {
+    fun finishing_a_pipes_game_writes_a_group_and_clears_its_save() = runBlocking {
         val store = newStore()
         val board = requireNotNull(Rules.newPipes(4, PipesLayout.Flat, 12_345))
         store.putSave(SavedGame(GameKind.Pipes, board.toSnapshot(), "QiuShui", 42, 1_000))
         assertNotNull(store.save(GameKind.Pipes).first())
 
-        // A game that ended: the record is what the screen writes, and the save is what it
-        // clears in the same breath.
-        store.addRecord(Record(RecordKey.Pipes(4, wrapped = false), "QiuShui", 42, 2_000))
-        store.clearSave(GameKind.Pipes)
+        val group = finished(PipesRecord(4, wrapped = false), 42)
+        store.addPlay(group)
 
         assertNull("the save of a finished game is gone", store.save(GameKind.Pipes).first())
-        val records = store.records.first()
-        assertEquals(1, records.size)
-        assertEquals("QiuShui", records.single().playerName)
-        assertEquals(42, records.single().seconds)
+        val groups = store.records.first()
+        assertEquals(1, groups.size)
+        assertEquals("QiuShui", groups.single().history.single().playerName)
+        assertEquals(42L, groups.single().bestSeconds)
     }
 
     @Test
@@ -132,8 +191,7 @@ class GameFlowTest {
         store.putSave(SavedGame(GameKind.Sudoku, board.toSnapshot(), "QiuShui", 33, 1_000))
 
         assertTrue(solveSudoku(board))
-        store.addRecord(Record(RecordKey.Sudoku("easy"), "QiuShui", 33, 2_000))
-        store.clearSave(GameKind.Sudoku)
+        store.addPlay(finished(SudokuRecord("easy"), 33))
 
         assertNull(store.save(GameKind.Sudoku).first())
         assertNotNull("finishing one game does not end the other", store.save(GameKind.Pipes).first())
@@ -154,7 +212,7 @@ class GameFlowTest {
         // The piece was turned anti-clockwise twice net, which a snapshot has to keep apart
         // from a single clockwise turn.
         assertEquals(board.piece(6), resumed.board.piece(6))
-        assertEquals(RecordKey.Pipes(5, wrapped = true), resumed.key)
+        assertEquals(PipesRecord(5, wrapped = true), resumed.key)
     }
 
     @Test
@@ -164,17 +222,17 @@ class GameFlowTest {
     }
 
     @Test
-    fun the_seed_of_a_game_survives_its_save_and_reaches_its_record() {
-        // A record keeps the seed so that a finished puzzle can be identified afterwards. The
-        // seed travels through the snapshot, which is what a saved game is, and the record is
+    fun the_seed_of_a_game_survives_its_save_and_reaches_its_play() {
+        // A play keeps the seed so that a finished puzzle can be identified afterwards. The
+        // seed travels through the snapshot, which is what a saved game is, and the play is
         // built from the game the player was in.
         val board = requireNotNull(Rules.newPipes(6, PipesLayout.Flat, 0x5EED))
         val save = SavedGame(GameKind.Pipes, board.toSnapshot(), "QiuShui", 9, 1_000)
         val resumed = requireNotNull(restoreGame(save)) as GameInProgress.Pipes
         assertEquals(board.seed, resumed.seed)
 
-        val record = Record(resumed.key, resumed.playerName, 9, 2_000, seed = resumed.seed)
-        assertEquals(0x5EEDL, record.seed)
+        val group = finished(resumed.key as PipesRecord, 9, seed = resumed.seed)
+        assertEquals(0x5EEDL, group.history.single().seed)
     }
 
     @Test
@@ -186,22 +244,23 @@ class GameFlowTest {
 
         val resumed = requireNotNull(restoreGame(save)) as GameInProgress.Sudoku
         assertEquals(SudokuDifficulty.Hard, resumed.board.difficulty)
-        assertEquals(RecordKey.Sudoku("hard"), resumed.key)
+        assertEquals(SudokuRecord("hard"), resumed.key)
         assertEquals(board.notes(empty), resumed.board.notes(empty))
     }
 
     @Test
-    fun the_record_of_a_finished_game_export_to_an_image() {
-        val record = Record(RecordKey.Pipes(9, wrapped = false), "QiuShui", 125, 1_700_000_000_000, seed = 7)
-        val name: (RecordKey) -> String = { "Pipes" }
-        val params: (RecordKey) -> String = { key -> key.toString() }
-        val single = RecordImage.single(record, name, params, "Unnamed", "exported", Typeface.MONOSPACE)
+    fun the_play_of_a_finished_game_exports_to_an_image() {
+        val group = finished(PipesRecord(9, wrapped = false), 125, seed = 7)
+        val play = group.history.single()
+        val name: (GameRecord) -> String = { "Pipes" }
+        val params: (GameRecord) -> String = { key -> key.toString() }
+        val single = RecordImage.single(group, play, name, params, "Unnamed", "exported", Typeface.MONOSPACE)
         assertEquals(RecordImage.width(), single.width)
         assertTrue(single.height > 0)
 
         val several =
             RecordImage.several(
-                List(3) { record },
+                listOf(group to play, group to play, group to play),
                 name,
                 params,
                 "Unnamed",
@@ -236,7 +295,7 @@ class GameFlowTest {
     }
 
     @Test
-    fun a_lost_minesweeper_game_writes_a_failed_record_and_clears_its_save() = runBlocking {
+    fun a_lost_minesweeper_game_writes_a_failed_play_and_clears_its_save() = runBlocking {
         val store = newStore()
         val board = requireNotNull(Rules.minesweeperFromSeed(9, 9, 10, MinesweeperMode.Normal, 5))
         store.putSave(SavedGame(GameKind.Minesweeper, board.toSnapshot(), "QiuShui", 12, 1_000))
@@ -250,21 +309,19 @@ class GameFlowTest {
         assertEquals(MinesweeperEvent.HitMine, board.reveal(mine))
         assertEquals(MinesweeperPhase.Lost, board.phase)
 
-        val record =
-            Record(
-                key = RecordKey.Minesweeper(9, 9, 10, noGuess = false),
-                playerName = "QiuShui",
-                seconds = 12,
-                finishedAt = 2_000,
+        val group =
+            finished(
+                MinesweeperRecord(9, 9, 10, noGuess = false),
+                12,
                 seed = board.seed,
                 failed = true,
             )
-        store.addRecord(record)
-        store.clearSave(GameKind.Minesweeper)
+        store.addPlay(group)
 
         assertNull("a lost game leaves no save", store.save(GameKind.Minesweeper).first())
-        assertEquals(true, store.records.first().single().failed)
-        assertNull("a loss is not a best time", store.best(record.key).first())
+        val stored = store.records.first().single()
+        assertEquals(true, stored.history.single().failed)
+        assertNull("a loss is not a best time", stored.bestSeconds)
     }
 
     @Test
@@ -279,7 +336,7 @@ class GameFlowTest {
         assertEquals(33, resumed.elapsedSeconds)
         assertEquals(board.cellsState(), resumed.board.cellsState())
         assertEquals(board.remainingMines, resumed.board.remainingMines)
-        assertEquals(RecordKey.Minesweeper(16, 16, 40, noGuess = false), resumed.key)
+        assertEquals(MinesweeperRecord(16, 16, 40, noGuess = false), resumed.key)
     }
 
     @Test
@@ -290,27 +347,19 @@ class GameFlowTest {
         board.reveal(5)
         assertEquals(true, board.fellBack)
         val game = GameInProgress.Minesweeper(board, "QiuShui", 3)
-        assertEquals(RecordKey.Minesweeper(4, 4, 12, noGuess = false), game.key)
+        assertEquals(MinesweeperRecord(4, 4, 12, noGuess = false), game.key)
     }
 
     @Test
-    fun a_typed_seed_reaches_the_record() {
+    fun a_typed_seed_reaches_the_play() {
         // The flag is what tells a history that the seed was chosen rather than produced, and
         // it travels with the game rather than with the record's key: two games on one board
         // are the same group whether or not either seed was typed.
         val board = requireNotNull(Rules.minesweeperFromSeed(9, 9, 10, MinesweeperMode.Normal, 4_242))
         val game = GameInProgress.Minesweeper(board, "QiuShui", 8, typedSeed = true)
-        val record =
-            Record(
-                key = game.key,
-                playerName = game.playerName,
-                seconds = 8,
-                finishedAt = 2_000,
-                seed = game.seed,
-                typedSeed = game.typedSeed,
-            )
-        assertEquals(true, record.typedSeed)
-        assertEquals(4_242L, record.seed)
+        val group = finished(game.key as MinesweeperRecord, 8, seed = game.seed, typedSeed = game.typedSeed)
+        assertEquals(true, group.history.single().typedSeed)
+        assertEquals(4_242L, group.history.single().seed)
     }
 
     @Test
@@ -326,7 +375,7 @@ class GameFlowTest {
         assertEquals(41, resumed.elapsedSeconds)
         assertEquals(board.cellsState(), resumed.board.cellsState())
         assertEquals(board.rowClues(), resumed.board.rowClues())
-        assertEquals(RecordKey.Nonogram(9, 9), resumed.key)
+        assertEquals(NonogramRecord(9, 9), resumed.key)
         assertEquals(board.seed, resumed.seed)
     }
 
@@ -343,37 +392,27 @@ class GameFlowTest {
         assertEquals(27, resumed.elapsedSeconds)
         assertEquals(board.islands(), resumed.board.islands())
         assertEquals(board.bridges(), resumed.board.bridges())
-        assertEquals(RecordKey.Hashi(9, 9, 12), resumed.key)
+        assertEquals(HashiRecord(9, 9, 12), resumed.key)
     }
 
     @Test
-    fun a_nonogram_that_finishes_writes_a_record_and_clears_its_save() = runBlocking {
+    fun a_nonogram_that_finishes_writes_a_group_and_clears_its_save() = runBlocking {
         val store = newStore()
         val board = requireNotNull(Rules.newNonogram(4, 4, 7))
         store.putSave(SavedGame(GameKind.Nonogram, board.toSnapshot(), "QiuShui", 3, 1_000))
         val game = GameInProgress.Nonogram(board, "QiuShui", 3)
-        val record =
-            Record(
-                key = game.key,
-                playerName = game.playerName,
-                seconds = 3,
-                finishedAt = 2_000,
-                seed = game.seed,
-                typedSeed = game.typedSeed,
-            )
-        store.addRecord(record)
-        store.clearSave(GameKind.Nonogram)
+        store.addPlay(finished(game.key as NonogramRecord, 3, seed = game.seed, typedSeed = game.typedSeed))
 
         assertNull("a finished game leaves no save", store.save(GameKind.Nonogram).first())
-        assertEquals(1, store.records.first().size)
-        assertEquals(RecordKey.Nonogram(4, 4), store.records.first().single().key)
-        assertEquals(3L, store.best(record.key).first())
+        val group = store.records.first().single()
+        assertEquals(NonogramRecord(4, 4), group.keyParameters())
+        assertEquals(3L, group.bestSeconds)
     }
 
     @Test
-    fun a_typed_seed_on_a_new_game_reaches_its_record() {
+    fun a_typed_seed_on_a_new_game_reaches_its_play() {
         // The two new games carry the flag the same way the three others do: it belongs to the
-        // game, and a record copies it while the game is still being played. The seed a record
+        // game, and a play copies it while the game is still being played. The seed a play
         // keeps is the one the board was drawn from, which is a derived seed rather than the
         // number the player typed: typing the same text again has to replay the same board,
         // and the derivation is what turns one into the other.
@@ -383,7 +422,7 @@ class GameFlowTest {
         assertEquals("the same seed replays the same board", again.seed, nonogram.seed)
         assertEquals(again.rowClues(), nonogram.board.rowClues())
         assertEquals(true, nonogram.typedSeed)
-        assertEquals(RecordKey.Nonogram(6, 6), nonogram.key)
+        assertEquals(NonogramRecord(6, 6), nonogram.key)
 
         val h = requireNotNull(Rules.newHashi(8, 8, 10, 4_242))
         val hashi = GameInProgress.Hashi(h, "QiuShui", 9, typedSeed = true)
@@ -391,6 +430,66 @@ class GameFlowTest {
         assertEquals("the same seed replays the same board", hashiAgain.seed, hashi.seed)
         assertEquals(hashiAgain.islands(), hashi.board.islands())
         assertEquals(true, hashi.typedSeed)
-        assertEquals(RecordKey.Hashi(8, 8, 10), hashi.key)
+        assertEquals(HashiRecord(8, 8, 10), hashi.key)
     }
+
+    @Test
+    fun solving_an_arrow_cube_writes_a_group_with_its_time_and_its_mistakes() = runBlocking {
+        val store = newStore()
+        val board = requireNotNull(Rules.newArrowCube(5, 5, 5, 21))
+        store.putSave(SavedGame(GameKind.ArrowCube, board.toSnapshot(), "QiuShui", 12, 1_000))
+        val refused = solveArrowCube(board)
+        assertTrue("the solved board has no blocks left", board.isSolved())
+
+        val game = GameInProgress.ArrowCube(board, "QiuShui", 42)
+        store.addPlay(
+            finished(
+                game.key as ArrowCubeRecord,
+                42,
+                seed = game.seed,
+                mistakes = board.mistakes,
+            ),
+        )
+
+        assertNull("a finished game leaves no save", store.save(GameKind.ArrowCube).first())
+        val group = store.records.first().single()
+        assertEquals(ArrowCubeRecord(5, 5, 5), group.keyParameters())
+        assertEquals(42L, group.bestSeconds)
+        assertEquals(refused, (group as ArrowCubeRecord).bestMistakes)
+        assertEquals(42L, group.history.single().seconds)
+        assertEquals(refused, group.history.single().mistakes)
+    }
+
+    @Test
+    fun a_saved_arrow_cube_is_restored_with_its_taken_blocks_and_its_clock() {
+        val board = requireNotNull(Rules.newArrowCube(5, 5, 5, 23))
+        var taken = false
+        for (index in 0 until board.blockCount) {
+            if (board.take(index).removed) {
+                taken = true
+                break
+            }
+        }
+        assertTrue("a generated board offers a block", taken)
+        val save = SavedGame(GameKind.ArrowCube, board.toSnapshot(), "QiuShui", 17, 1_000)
+
+        val resumed = requireNotNull(restoreGame(save)) as GameInProgress.ArrowCube
+        assertEquals("QiuShui", resumed.playerName)
+        assertEquals(17, resumed.elapsedSeconds)
+        assertEquals(ArrowCubeRecord(5, 5, 5), resumed.key)
+        assertEquals(board.mistakes, resumed.board.mistakes)
+        assertEquals(board.remainingCount, resumed.board.remainingCount)
+        assertEquals(board.blocks(), resumed.board.blocks())
+    }
+
+    /** Returns a group's parameters without its plays, for comparing it with a key. */
+    private fun GameRecord.keyParameters(): GameRecord =
+        when (this) {
+            is PipesRecord -> PipesRecord(size, wrapped)
+            is SudokuRecord -> SudokuRecord(difficulty)
+            is MinesweeperRecord -> MinesweeperRecord(width, height, mines, noGuess)
+            is NonogramRecord -> NonogramRecord(width, height)
+            is HashiRecord -> HashiRecord(width, height, islands)
+            is ArrowCubeRecord -> ArrowCubeRecord(width, depth, height)
+        }
 }

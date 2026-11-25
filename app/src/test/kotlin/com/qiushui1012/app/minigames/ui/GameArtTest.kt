@@ -126,11 +126,23 @@ class GameArtTest {
     }
 
     @Test
+    fun the_arrow_cube_mark_uses_the_ink_the_surface_and_the_alert() {
+        // The mark is a cube drawn in the file's ink and surface, with one red arrow: a red
+        // that resolved to the ink would take the one coloured fact off the card.
+        val tones = GameArt.of(context, GameKind.ArrowCube).flatMap { listOfNotNull(it.fill, it.stroke) }.toSet()
+        assertTrue("the arrow cube mark never paints the ink", GameArt.Tone.Ink in tones)
+        assertTrue("the arrow cube mark never paints the surface", GameArt.Tone.Surface in tones)
+        assertTrue("the arrow cube mark never paints the alert", GameArt.Tone.Alert in tones)
+        assertTrue("the arrow cube mark paints a tone it does not use", GameArt.Tone.Neutral !in tones)
+    }
+
+    @Test
     fun every_game_reports_its_own_file() {
         assertEquals("pipes.svg", GameArt.file(GameKind.Pipes))
         assertEquals("sudoku.svg", GameArt.file(GameKind.Sudoku))
         assertEquals("minesweeper.svg", GameArt.file(GameKind.Minesweeper))
         assertEquals("nonogram.svg", GameArt.file(GameKind.Nonogram))
         assertEquals("hashi.svg", GameArt.file(GameKind.Hashi))
+        assertEquals("arrowcube.svg", GameArt.file(GameKind.ArrowCube))
     }
 }

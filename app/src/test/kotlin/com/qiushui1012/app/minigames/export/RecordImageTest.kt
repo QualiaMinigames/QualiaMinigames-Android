@@ -16,8 +16,15 @@ package com.qiushui1012.app.minigames.export
 
 import android.graphics.Bitmap
 import android.graphics.Typeface
-import com.qiushui1012.app.minigames.data.Record
-import com.qiushui1012.app.minigames.data.RecordKey
+import com.qiushui1012.app.minigames.data.ArrowCubeRecord
+import com.qiushui1012.app.minigames.data.GameRecord
+import com.qiushui1012.app.minigames.data.HashiRecord
+import com.qiushui1012.app.minigames.data.MinesweeperRecord
+import com.qiushui1012.app.minigames.data.NonogramRecord
+import com.qiushui1012.app.minigames.data.PipesRecord
+import com.qiushui1012.app.minigames.data.Play
+import com.qiushui1012.app.minigames.data.SudokuRecord
+import com.qiushui1012.app.minigames.data.append
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -35,52 +42,90 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class RecordImageTest {
-    /** The column headings the several-record layout draws. */
+    /** The column headings the several-play layout draws. */
     private val HEADERS = listOf("Player", "Game", "Time", "Finished")
 
-    /** Returns a finished pipes game. */
-    private fun pipes(seconds: Long) =
-        Record(RecordKey.Pipes(9, wrapped = false), "Tester", seconds, 1_700_000_000_000, seed = 4_242)
+    /** Returns a finished pipes group. */
+    private fun pipes(
+        seconds: Long,
+        failed: Boolean? = null,
+        typedSeed: Boolean = false,
+    ): PipesRecord =
+        PipesRecord(9, wrapped = false).append(
+            Play(
+                playerName = "Tester",
+                seconds = seconds,
+                finishedAt = 1_700_000_000_000,
+                seed = 4_242,
+                failed = failed,
+                typedSeed = typedSeed,
+            ),
+        ) as PipesRecord
 
-    /** Returns a record's game name. */
-    private val name: (RecordKey) -> String = { key ->
-        when (key) {
-            is RecordKey.Pipes -> "Pipes"
-            is RecordKey.Sudoku -> "Sudoku"
-            is RecordKey.Minesweeper -> "Minesweeper"
-            is RecordKey.Nonogram -> "Nonogram"
-            is RecordKey.Hashi -> "Hashi"
+    /** Returns a finished arrow cube group with a mistake count. */
+    private fun arrowCube(
+        seconds: Long,
+        mistakes: Int,
+    ): ArrowCubeRecord =
+        ArrowCubeRecord(10, 10, 10).append(
+            Play(
+                playerName = "Tester",
+                seconds = seconds,
+                finishedAt = 1_700_000_000_000,
+                seed = 4_242,
+                mistakes = mistakes,
+            ),
+        ) as ArrowCubeRecord
+
+    /** Returns a group's game name. */
+    private val name: (GameRecord) -> String = { group ->
+        when (group) {
+            is PipesRecord -> "Pipes"
+            is SudokuRecord -> "Sudoku"
+            is MinesweeperRecord -> "Minesweeper"
+            is NonogramRecord -> "Nonogram"
+            is HashiRecord -> "Hashi"
+            is ArrowCubeRecord -> "Arrow Cube"
         }
     }
 
-    /** Reads a record's parameters back as a label. */
-    private val params: (RecordKey) -> String = { key ->
-        when (key) {
-            is RecordKey.Pipes -> "${key.size}x${key.size}"
-            is RecordKey.Sudoku -> key.difficulty
-            is RecordKey.Minesweeper -> "${key.width}x${key.height}, ${key.mines} mines"
-            is RecordKey.Nonogram -> "${key.width}x${key.height}"
-            is RecordKey.Hashi -> "${key.width}x${key.height}, ${key.islands} islands"
+    /** Reads a group's parameters back as a label. */
+    private val params: (GameRecord) -> String = { group ->
+        when (group) {
+            is PipesRecord -> "${group.size}x${group.size}"
+            is SudokuRecord -> group.difficulty
+            is MinesweeperRecord -> "${group.width}x${group.height}, ${group.mines} mines"
+            is NonogramRecord -> "${group.width}x${group.height}"
+            is HashiRecord -> "${group.width}x${group.height}, ${group.islands} islands"
+            is ArrowCubeRecord -> "${group.width}x${group.height}x${group.depth}"
         }
     }
 
-    /** Returns a single record's image with the defaults every test shares. */
-    private fun single(record: Record) =
-        RecordImage.single(record, name, params, "Unnamed", "exported", Typeface.MONOSPACE)
+    /** Returns a single play's image with the defaults every test shares. */
+    private fun single(group: GameRecord) = RecordImage.single(group, group.history.single(), name, params, "Unnamed", "exported", Typeface.MONOSPACE)
 
     /** Returns a column's image with the defaults every test shares. */
-    private fun several(records: List<Record>) =
-        RecordImage.several(records, name, params, "Unnamed", "exported", "Play records", HEADERS, Typeface.MONOSPACE)
+    private fun several(groups: List<GameRecord>) =
+        RecordImage.several(
+            groups.map { it to it.history.single() },
+            name,
+            params,
+            "Unnamed",
+            "exported",
+            "Play records",
+            HEADERS,
+            Typeface.MONOSPACE,
+        )
 
     @Test
-    fun asingle_record_is_a_card_of_the_export_width() {
+    fun a_single_play_is_a_card_of_the_export_width() {
         val bitmap = single(pipes(90))
         assertEquals(RecordImage.width(), bitmap.width)
         assertTrue("the card has no height", bitmap.height > 0)
     }
 
     @Test
-    fun a_single_record_has_room_for_its_facts_and_the_export_time() {
+    fun a_single_play_has_room_for_its_facts_and_the_export_time() {
         // The layout places the time, the player and the finish time one below the other and
         // the export time below the card: a height that fits a card alone would clip the last
         // of them, which is the defect the fixed constants used to hide.
@@ -91,7 +136,7 @@ class RecordImageTest {
     }
 
     @Test
-    fun a_column_grows_with_the_number_of_records() {
+    fun a_column_grows_with_the_number_of_plays() {
         val few = several(listOf(pipes(90)))
         val many = several(List(10) { pipes(90L + it) })
         assertTrue("the column did not grow", many.height > few.height)
@@ -100,7 +145,7 @@ class RecordImageTest {
     @Test
     fun a_column_is_as_wide_as_its_table_and_no_wider() {
         val narrow = several(listOf(pipes(90)))
-        val wide = several(listOf(pipes(90).copy(playerName = "A player with a very long name indeed")))
+        val wide = several(listOf(pipes(90).copy(history = listOf(pipes(90).history.single().copy(playerName = "A player with a very long name indeed")))))
         assertTrue("a wider cell widens the image", wide.width > narrow.width)
         assertTrue("the image is wider than its content needs", narrow.width < RecordImage.width())
     }
@@ -114,17 +159,37 @@ class RecordImageTest {
     }
 
     @Test
-    fun a_failed_record_keeps_its_time_and_adds_the_word() {
+    fun a_failed_play_keeps_its_time_and_adds_the_word() {
         // A lost game is a fact worth exporting, and its duration is still the fact it is. The
         // card therefore says both, and a column holding one is wider than a column of times
         // alone: a column sized for the times would clip the word off the front of its row.
-        val lost = pipes(53).copy(failed = true)
+        val lost = pipes(53, failed = true)
         val won = pipes(53)
-        val lostCard = RecordImage.single(lost, name, params, "Unnamed", "exported", Typeface.MONOSPACE, failed = "Failed")
+        val lostCard =
+            RecordImage.single(
+                lost,
+                lost.history.single(),
+                name,
+                params,
+                "Unnamed",
+                "exported",
+                Typeface.MONOSPACE,
+                failed = "Failed",
+            )
         assertEquals(RecordImage.width(), lostCard.width)
         assertTrue("the card lost its bottom", lostCard.height > 0)
         val lostColumn =
-            RecordImage.several(listOf(lost), name, params, "Unnamed", "exported", "Play records", HEADERS, Typeface.MONOSPACE, failed = "Failed")
+            RecordImage.several(
+                listOf(lost to lost.history.single()),
+                name,
+                params,
+                "Unnamed",
+                "exported",
+                "Play records",
+                HEADERS,
+                Typeface.MONOSPACE,
+                failed = "Failed",
+            )
         val wonColumn = several(listOf(won))
         assertTrue("the failed word did not widen the time column", lostColumn.width > wonColumn.width)
     }
@@ -132,10 +197,10 @@ class RecordImageTest {
     @Test
     fun a_hand_typed_seed_widens_the_game_column() {
         // The mark is appended to the parameters, so it is the game column that has to grow.
-        val typedRecord = pipes(90).copy(typedSeed = true)
+        val typed = pipes(90, typedSeed = true)
         val typedColumn =
             RecordImage.several(
-                listOf(typedRecord),
+                listOf(typed to typed.history.single()),
                 name,
                 params,
                 "Unnamed",
@@ -146,5 +211,39 @@ class RecordImageTest {
                 typed = "Entered by hand",
             )
         assertTrue("the typed mark did not widen the game column", typedColumn.width > several(listOf(pipes(90))).width)
+    }
+
+    @Test
+    fun the_mistakes_of_an_arrow_cube_play_fit_both_layouts() {
+        // The count is drawn beside the time, so it widens the time column and not the card.
+        val group = arrowCube(125, mistakes = 4)
+        val card =
+            RecordImage.single(
+                group,
+                group.history.single(),
+                name,
+                params,
+                "Unnamed",
+                "exported",
+                Typeface.MONOSPACE,
+                mistakes = { "$it mistakes" },
+            )
+        assertEquals(RecordImage.width(), card.width)
+        assertTrue("the card lost its bottom", card.height > 0)
+
+        val withMistakes =
+            RecordImage.several(
+                listOf(group to group.history.single()),
+                name,
+                params,
+                "Unnamed",
+                "exported",
+                "Play records",
+                HEADERS,
+                Typeface.MONOSPACE,
+                mistakes = { "$it mistakes" },
+            )
+        val withoutMistakes = several(listOf(group))
+        assertTrue("the count did not widen the time column", withMistakes.width > withoutMistakes.width)
     }
 }

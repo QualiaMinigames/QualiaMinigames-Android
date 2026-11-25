@@ -60,9 +60,19 @@ import com.qiushui1012.app.minigames.AppContainer
 import com.qiushui1012.app.minigames.DurationFont
 import com.qiushui1012.app.minigames.R
 import com.qiushui1012.app.minigames.Space
+import com.qiushui1012.app.minigames.data.ArrowCubeRecord
 import com.qiushui1012.app.minigames.data.GameKind
-import com.qiushui1012.app.minigames.data.Record
-import com.qiushui1012.app.minigames.data.RecordKey
+import com.qiushui1012.app.minigames.data.GameRecord
+import com.qiushui1012.app.minigames.data.HashiRecord
+import com.qiushui1012.app.minigames.data.MinesweeperRecord
+import com.qiushui1012.app.minigames.data.NonogramRecord
+import com.qiushui1012.app.minigames.data.PipesRecord
+import com.qiushui1012.app.minigames.data.Play
+import com.qiushui1012.app.minigames.data.PlayRef
+import com.qiushui1012.app.minigames.data.SudokuRecord
+import com.qiushui1012.app.minigames.data.groupKey
+import com.qiushui1012.app.minigames.data.kind
+import com.qiushui1012.app.minigames.data.ref
 import com.qiushui1012.app.minigames.difficultyFromStorageName
 import com.qiushui1012.app.minigames.export.ImageExport
 import com.qiushui1012.app.minigames.export.RecordImage
@@ -86,12 +96,13 @@ private val CardMinWidth = 340.dp
  * # The order of a group
  *
  * The best time comes first and the games follow, newest first. The groups themselves are
- * ordered the same way every time, so a group does not move when a game is added to it.
+ * ordered the same way every time, so a group does not move when a game is added to it: the
+ * store returns them already sorted, and this page draws them in that order.
  *
  * # Selecting and exporting
  *
- * A selection mode exists because the two exports are different pictures. One record is a
- * card, several are a table, and the player chooses which by how many are selected.
+ * A selection mode exists because the two exports are different pictures. One play is a card,
+ * several are a table, and the player chooses which by how many are selected.
  *
  * # Where the actions live
  *
@@ -111,19 +122,19 @@ fun RecordsScreen(
     val scope = rememberCoroutineScope()
 
     var selecting by remember { mutableStateOf(false) }
-    var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var selected by remember { mutableStateOf<Set<PlayRef>>(emptySet()) }
     var message by remember { mutableStateOf<String?>(null) }
     var shareTarget by remember { mutableStateOf<android.net.Uri?>(null) }
     // Expanded is the state a group starts in, so the set holds the collapsed ones rather than
     // the open ones: a new game's group should not appear open only after it has been seen.
     var collapsed by remember { mutableStateOf<Set<GameKind>>(emptySet()) }
 
-    // A selection is about records that exist. When one is deleted — by the confirmation this
+    // A selection is about plays that exist. When one is deleted — by the confirmation this
     // page opens, or by anything else — the page drops it from the selection, and a selection
-    // that empties itself leaves the selection mode: a bar over no records is a bar that can
+    // that empties itself leaves the selection mode: a bar over no plays is a bar that can
     // only be dismissed.
-    val present = records.map { it.id() }.toSet()
-    androidx.compose.runtime.LaunchedEffect(present) {
+    val present = records.flatMap { group -> group.history.map { it.ref(group.groupKey()) } }.toSet()
+    LaunchedEffect(present) {
         selected = selected intersect present
         if (selected.isEmpty()) {
             selecting = false
@@ -132,14 +143,14 @@ fun RecordsScreen(
 
     val exportedAtLabel = stringResource(R.string.records_exported_at, currentStamp())
     val unknownPlayer = stringResource(R.string.records_unknown_player)
-    // The label is the one the list uses, in the language the interface is in. A record's key
-    // carries a storage spelling (`easy`, `hard`), and an exported card that said `easy` beside
-    // a screen that said `简单` would be a picture of a different application. The pairs are
-    // resolved here, inside the composition, because the drawing runs outside it.
-    val labels: Map<RecordKey, String> = records.associate { record -> record.key to keyLabel(record.key) }
-    val label: (RecordKey) -> String = { key -> labels[key] ?: key.toString() }
-    val names: Map<RecordKey, String> = records.associate { record -> record.key to gameKindLabel(kindOf(record.key)) }
-    val name: (RecordKey) -> String = { key -> names[key] ?: "" }
+    // The label is the one the list uses, in the language the interface is in. A record holds
+    // its parameters as numbers, and an exported card that said them in another language would
+    // be a picture of a different application. The values are resolved here, inside the
+    // composition, because the drawing runs outside it.
+    val labels: Map<String, String> = records.associate { group -> group.groupKey() to group.keyLabel() }
+    val label: (GameRecord) -> String = { group -> labels[group.groupKey()] ?: "" }
+    val names: Map<String, String> = records.associate { group -> group.groupKey() to gameKindLabel(group.kind) }
+    val name: (GameRecord) -> String = { group -> names[group.groupKey()] ?: "" }
     val headers =
         listOf(
             stringResource(R.string.records_column_player),
@@ -150,16 +161,17 @@ fun RecordsScreen(
     val exportTitle = stringResource(R.string.records_export_title)
     val failedLabel = stringResource(R.string.records_failed)
     val typedSeedLabel = stringResource(R.string.records_typed_seed)
+    val mistakesLabel: (Int) -> String = { count -> context.getString(R.string.records_mistakes, count) }
     val durationTypeface =
         remember(context) {
             ResourcesCompat.getFont(context, R.font.cascadia_code) ?: android.graphics.Typeface.MONOSPACE
         }
 
-    fun export(selection: List<Record>) {
+    fun export(selection: List<Pair<GameRecord, Play>>) {
         if (selection.isEmpty()) {
             return
         }
-        // The two marks a record can carry are resolved here, where the language is known, for
+        // The two marks a play can carry are resolved here, where the language is known, for
         // the same reason the parameters are: the drawing runs outside the composition.
         val failedLabel = failedLabel
         val typedLabel = typedSeedLabel
@@ -168,8 +180,10 @@ fun RecordsScreen(
                 withContext(Dispatchers.Default) {
                     val bitmap =
                         if (selection.size == 1) {
+                            val (group, play) = selection.first()
                             RecordImage.single(
-                                record = selection.first(),
+                                group = group,
+                                play = play,
                                 name = name,
                                 params = label,
                                 unknown = unknownPlayer,
@@ -177,10 +191,11 @@ fun RecordsScreen(
                                 durationTypeface = durationTypeface,
                                 failed = failedLabel,
                                 typed = typedLabel,
+                                mistakes = mistakesLabel,
                             )
                         } else {
                             RecordImage.several(
-                                records = selection,
+                                entries = selection,
                                 name = name,
                                 params = label,
                                 unknown = unknownPlayer,
@@ -190,6 +205,7 @@ fun RecordsScreen(
                                 durationTypeface = durationTypeface,
                                 failed = failedLabel,
                                 typed = typedLabel,
+                                mistakes = mistakesLabel,
                             )
                         }
                     ImageExport.save(context, bitmap, "qualia-minigames-${System.currentTimeMillis()}.png")
@@ -229,15 +245,23 @@ fun RecordsScreen(
                                 count = selected.size,
                                 onSelectAll = {
                                     selected =
-                                        if (selected.size == records.size) {
+                                        if (selected.size == present.size) {
                                             emptySet()
                                         } else {
-                                            records.map { it.id() }.toSet()
+                                            present
                                         }
                                 },
-                                onExport = { export(records.filter { it.id() in selected }) },
+                                onExport = {
+                                    export(
+                                        records.flatMap { group ->
+                                            group.history
+                                                .filter { it.ref(group.groupKey()) in selected }
+                                                .map { group to it }
+                                        },
+                                    )
+                                },
                                 // Deleting asks first, exactly as clearing does: both destroy
-                                // records that no longer exist anywhere else, and a selection
+                                // plays that no longer exist anywhere else, and a selection
                                 // made with one tap should not be undone with another.
                                 onDelete = { onRequestDialog(ShellDialog.DeleteRecords(selected)) },
                                 onCancel = {
@@ -277,7 +301,7 @@ fun RecordsScreen(
                 }
             }
 
-            for ((kind, ofKind) in recordsByKind(records)) {
+            for ((kind, groups) in recordsByKind(records)) {
                 val expanded = kind !in collapsed
                 KindHeader(
                     name = gameKindLabel(kind),
@@ -292,20 +316,18 @@ fun RecordsScreen(
                     },
                 )
                 if (expanded) {
-                    val groups = groupRecords(ofKind)
                     for (row in groups.chunked(columns)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(Space.l)) {
-                            for ((key, group) in row) {
+                            for (group in row) {
                                 Box(Modifier.weight(1f)) {
                                     RecordGroup(
-                                        key = key,
-                                        records = group,
+                                        group = group,
                                         selecting = selecting,
                                         selected = selected,
-                                        onToggle = { id ->
-                                            selected = if (id in selected) selected - id else selected + id
+                                        onToggle = { ref ->
+                                            selected = if (ref in selected) selected - ref else selected + ref
                                         },
-                                        onOpen = { onRequestDialog(ShellDialog.RecordDetail(it)) },
+                                        onOpen = { play -> onRequestDialog(ShellDialog.RecordDetail(group, play)) },
                                     )
                                 }
                             }
@@ -425,19 +447,15 @@ private fun KindHeader(
     }
 }
 
-/** One group of records: its parameters, its best time, and the games themselves. */
+/** One group of a game's plays: its parameters, its best time, and the plays themselves. */
 @Composable
 private fun RecordGroup(
-    key: RecordKey,
-    records: List<Record>,
+    group: GameRecord,
     selecting: Boolean,
-    selected: Set<String>,
-    onToggle: (String) -> Unit,
-    onOpen: (Record) -> Unit,
+    selected: Set<PlayRef>,
+    onToggle: (PlayRef) -> Unit,
+    onOpen: (Play) -> Unit,
 ) {
-    // A best time is a cleared board's time: a game that ended on a mine is a record of the
-    // game, not a time to beat.
-    val best = records.filter { it.failed != true }.minByOrNull { it.seconds }
     SectionCard(
         header = {
             Row(
@@ -448,7 +466,7 @@ private fun RecordGroup(
                 // The parameters are the card's title, and the best time stands beside them:
                 // the two are what a player compares this card with the next one by.
                 Text(
-                    keyLabel(key),
+                    group.keyLabel(),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
@@ -458,77 +476,104 @@ private fun RecordGroup(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Text(
-                    formatDuration(best?.seconds ?: 0),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontFamily = DurationFont,
-                )
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        // A group that has only lost plays has no best time, and `0:00` would
+                        // be a time nobody played: the dash says there is nothing to show.
+                        group.bestSeconds?.let(::formatDuration) ?: stringResource(R.string.records_no_best),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontFamily = DurationFont,
+                    )
+                    val bestMistakes = group.bestMistakes()
+                    if (bestMistakes != null) {
+                        Text(
+                            stringResource(R.string.records_mistakes, bestMistakes),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
         },
     ) {
         Text(stringResource(R.string.records_history), style = MaterialTheme.typography.labelLarge)
-        for (record in records.sortedByDescending { it.finishedAt }) {
-            val id = record.id()
+        for (play in group.history.sortedByDescending { it.finishedAt }) {
+            val ref = play.ref(group.groupKey())
             Row(
                 modifier =
                     Modifier
                         .fillMaxWidth()
                         .then(
                             if (selecting) {
-                                Modifier.toggleable(value = id in selected, onValueChange = { onToggle(id) })
+                                Modifier.toggleable(value = ref in selected, onValueChange = { onToggle(ref) })
                             } else {
-                                Modifier.clickableRow { onOpen(record) }
+                                Modifier.clickableRow { onOpen(play) }
                             },
                         ),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Space.s),
             ) {
                 if (selecting) {
-                    Checkbox(checked = id in selected, onCheckedChange = { onToggle(id) })
+                    Checkbox(checked = ref in selected, onCheckedChange = { onToggle(ref) })
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        record.playerName.ifBlank { stringResource(R.string.records_unknown_player) },
+                        play.playerName.ifBlank { stringResource(R.string.records_unknown_player) },
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    RecordMarks(record)
+                    RecordMarks(play)
                 }
-                Text(
-                    if (record.failed == true) {
-                        stringResource(R.string.records_failed)
-                    } else {
-                        formatDuration(record.seconds)
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontFamily = DurationFont,
-                    color =
-                        if (record.failed == true) {
-                            MaterialTheme.colorScheme.error
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        if (play.failed == true) {
+                            stringResource(R.string.records_failed)
                         } else {
-                            MaterialTheme.colorScheme.onSurface
+                            formatDuration(play.seconds)
                         },
-                )
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontFamily = DurationFont,
+                        color =
+                            if (play.failed == true) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                    )
+                    // Only arrow cube counts mistakes, and a play of another game has none: the
+                    // line is drawn from the play rather than from the game's name.
+                    play.mistakes?.let { mistakes ->
+                        Text(
+                            stringResource(R.string.records_mistakes, mistakes),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
         }
     }
 }
 
+/** Returns the mistakes of the play that holds a group's best time, for the game that counts them. */
+private fun GameRecord.bestMistakes(): Int? =
+    if (this is ArrowCubeRecord) bestMistakes else null
+
 /**
- * The line under a record's player: when it finished, and how it was started.
+ * The line under a play's player: when it finished, and how it was started.
  *
  * A hand-picked seed is a fact a list of times cannot show, so it is written here rather than
  * left to the detail dialog. The outcome is not repeated here: it is the time column beside
  * this line that says "failed", and a row that said it twice would say nothing twice.
  */
 @Composable
-private fun RecordMarks(record: Record) {
+private fun RecordMarks(play: Play) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
         Text(
-            listStamp.format(Instant.ofEpochMilli(record.finishedAt).atZone(ZoneId.systemDefault())),
+            listStamp.format(Instant.ofEpochMilli(play.finishedAt).atZone(ZoneId.systemDefault())),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (record.typedSeed) {
+        if (play.typedSeed) {
             Text(
                 stringResource(R.string.records_typed_seed),
                 style = MaterialTheme.typography.bodySmall,
@@ -542,16 +587,17 @@ private fun RecordMarks(record: Record) {
 private fun Modifier.clickableRow(onClick: () -> Unit): Modifier = this.clickable(onClick = onClick)
 
 /**
- * The dialog that shows one record in full.
+ * The dialog that shows one play in full.
  *
- * Everything the record holds is here, including the seed: the list is a summary, and the seed
- * is the one field that says which puzzle this was. A record with a seed offers to copy it,
+ * Everything the play holds is here, including the seed: the list is a summary, and the seed
+ * is the one field that says which puzzle this was. A play with a seed offers to copy it,
  * because a seed is meant to be typed into the field of the next game and retyping eighteen
  * digits from a screenshot is not what the record is for.
  */
 @Composable
 fun RecordDetailDialog(
-    record: Record,
+    group: GameRecord,
+    play: Play,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -576,39 +622,48 @@ fun RecordDetailDialog(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(Space.m),
         ) {
-            LabeledValue(stringResource(R.string.records_detail_game), gameKindLabel(kindOf(record.key)))
-            LabeledValue(stringResource(R.string.records_detail_params), keyLabel(record.key))
+            LabeledValue(stringResource(R.string.records_detail_game), gameKindLabel(group.kind))
+            LabeledValue(stringResource(R.string.records_detail_params), group.keyLabel())
             LabeledValue(
                 stringResource(R.string.records_column_player),
-                record.playerName.ifBlank { stringResource(R.string.records_unknown_player) },
+                play.playerName.ifBlank { stringResource(R.string.records_unknown_player) },
             )
             Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
                 Text(stringResource(R.string.records_column_time), style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
                     Text(
-                        if (record.failed == true) {
+                        if (play.failed == true) {
                             stringResource(R.string.records_failed)
+                        } else if (group.kind == GameKind.ArrowCube) {
+                            stringResource(R.string.arrow_cube_won)
                         } else {
                             stringResource(R.string.minesweeper_won)
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         color =
-                            if (record.failed == true) {
+                            if (play.failed == true) {
                                 MaterialTheme.colorScheme.error
                             } else {
                                 MaterialTheme.colorScheme.onSurface
                             },
                     )
                     Text(
-                        formatDuration(record.seconds),
+                        formatDuration(play.seconds),
                         style = MaterialTheme.typography.bodyMedium,
                         fontFamily = DurationFont,
                     )
+                    play.mistakes?.let { mistakes ->
+                        Text(
+                            stringResource(R.string.records_mistakes, mistakes),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
             LabeledValue(
                 stringResource(R.string.records_column_finished),
-                listStamp.format(Instant.ofEpochMilli(record.finishedAt).atZone(ZoneId.systemDefault())),
+                listStamp.format(Instant.ofEpochMilli(play.finishedAt).atZone(ZoneId.systemDefault())),
             )
             Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
                 Text(stringResource(R.string.records_detail_seed), style = MaterialTheme.typography.labelLarge)
@@ -617,9 +672,9 @@ fun RecordDetailDialog(
                     horizontalArrangement = Arrangement.spacedBy(Space.s),
                 ) {
                     Text(
-                        // A record written before seeds were kept has none, and inventing one
+                        // A play written before seeds were kept has none, and inventing one
                         // would be a number that does not generate this puzzle.
-                        record.seed?.toString() ?: "-",
+                        play.seed?.toString() ?: "-",
                         style = MaterialTheme.typography.bodyMedium,
                         fontFamily = DurationFont,
                         modifier = Modifier.weight(1f),
@@ -633,7 +688,7 @@ fun RecordDetailDialog(
                     }
                     IconButton(
                         onClick = {
-                            record.seed?.let { seed ->
+                            play.seed?.let { seed ->
                                 clipboard?.setPrimaryClip(
                                     android.content.ClipData.newPlainText(
                                         context.getString(R.string.dialog_seed),
@@ -643,7 +698,7 @@ fun RecordDetailDialog(
                                 copiedShown = true
                             }
                         },
-                        enabled = record.seed != null,
+                        enabled = play.seed != null,
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_content_copy),
@@ -654,7 +709,7 @@ fun RecordDetailDialog(
                 // The hand-typed mark belongs to the seed it describes, so it sits under the
                 // seed rather than in a field of its own: a second label would read as a
                 // second fact rather than as a note about this one.
-                if (record.typedSeed) {
+                if (play.typedSeed) {
                     Text(
                         stringResource(R.string.records_typed_seed),
                         style = MaterialTheme.typography.bodySmall,
@@ -667,7 +722,7 @@ fun RecordDetailDialog(
 }
 
 /**
- * The dialog that asks before the selected records are deleted.
+ * The dialog that asks before the selected plays are deleted.
  *
  * [count] is how many are about to go, which the question quotes: "delete 3 records?" is a
  * question a player can answer, and "delete the selected records?" is one they have to count
@@ -703,59 +758,11 @@ fun ClearRecordsDialog(
     }
 }
 
-/** Groups records by the game they belong to, in the order the home page shows the games. */
-fun recordsByKind(records: List<Record>): List<Pair<GameKind, List<Record>>> =
+/** Groups record groups by the game they belong to, in the order the home page shows the games. */
+fun recordsByKind(records: List<GameRecord>): List<Pair<GameKind, List<GameRecord>>> =
     GameKind.entries.mapNotNull { kind ->
-        val ofKind = records.filter { kindOf(it.key) == kind }
+        val ofKind = records.filter { it.kind == kind }
         if (ofKind.isEmpty()) null else kind to ofKind
-    }
-
-/** Returns which game a record belongs to. */
-fun kindOf(key: RecordKey): GameKind =
-    when (key) {
-        is RecordKey.Pipes -> GameKind.Pipes
-        is RecordKey.Sudoku -> GameKind.Sudoku
-        is RecordKey.Minesweeper -> GameKind.Minesweeper
-        is RecordKey.Nonogram -> GameKind.Nonogram
-        is RecordKey.Hashi -> GameKind.Hashi
-    }
-
-/** Groups records by the parameters they were played with, in a stable order. */
-fun groupRecords(records: List<Record>): List<Pair<RecordKey, List<Record>>> =
-    records
-        .groupBy { it.key }
-        .toList()
-        .sortedWith(
-            compareBy(
-                { (key, _) -> kindOrder(kindOf(key)) },
-                { (key, _) -> if (key is RecordKey.Pipes) key.size else 0 },
-                { (key, _) -> if (key is RecordKey.Pipes && key.wrapped) 1 else 0 },
-                { (key, _) -> if (key is RecordKey.Sudoku) key.difficulty else "" },
-                // A minesweeper group is filed by its width, its height, its mine count and
-                // its rules, in that order: a wider board first reads as a larger game, and
-                // the mode breaks the last tie.
-                { (key, _) -> if (key is RecordKey.Minesweeper) key.width else 0 },
-                { (key, _) -> if (key is RecordKey.Minesweeper) key.height else 0 },
-                { (key, _) -> if (key is RecordKey.Minesweeper) key.mines else 0 },
-                { (key, _) -> if (key is RecordKey.Minesweeper && key.noGuess) 1 else 0 },
-                // A nonogram group is filed by its two sides, and a hashi group by its sides
-                // and its island count, which is what tells two boards of one grid apart.
-                { (key, _) -> if (key is RecordKey.Nonogram) key.width else 0 },
-                { (key, _) -> if (key is RecordKey.Nonogram) key.height else 0 },
-                { (key, _) -> if (key is RecordKey.Hashi) key.width else 0 },
-                { (key, _) -> if (key is RecordKey.Hashi) key.height else 0 },
-                { (key, _) -> if (key is RecordKey.Hashi) key.islands else 0 },
-            ),
-        )
-
-/** Returns where a game's groups stand in the records page. */
-private fun kindOrder(kind: GameKind): Int =
-    when (kind) {
-        GameKind.Pipes -> 0
-        GameKind.Sudoku -> 1
-        GameKind.Minesweeper -> 2
-        GameKind.Nonogram -> 3
-        GameKind.Hashi -> 4
     }
 
 /** Returns the label of a game, which is its name in the interface's language. */
@@ -768,44 +775,46 @@ fun gameKindLabel(kind: GameKind): String =
             GameKind.Minesweeper -> R.string.home_minesweeper_name
             GameKind.Nonogram -> R.string.home_nonogram_name
             GameKind.Hashi -> R.string.home_hashi_name
+            GameKind.ArrowCube -> R.string.home_arrow_cube_name
         },
     )
 
 /**
- * Returns the label of a record's parameters.
+ * Returns the label of a record group's parameters.
  *
  * This is the one place the parameters of a game are written, and the home card, the game
- * header and the exported image all read it: four spellings of "9 × 9, 10 mines" that drifted
- * apart would be four answers to one question.
+ * header, the records page and the exported image all read it: four spellings of "9 × 9, 10
+ * mines" that drifted apart would be four answers to one question.
  */
 @Composable
-fun keyLabel(key: RecordKey): String =
-    when (key) {
-        is RecordKey.Pipes ->
+fun GameRecord.keyLabel(): String =
+    when (this) {
+        is PipesRecord ->
             stringResource(
                 R.string.home_pipes_summary,
-                key.size,
-                stringResource(if (key.wrapped) R.string.pipes_layout_wrapped else R.string.pipes_layout_flat),
+                size,
+                stringResource(if (wrapped) R.string.pipes_layout_wrapped else R.string.pipes_layout_flat),
             )
 
-        is RecordKey.Sudoku ->
-            stringResource(R.string.home_sudoku_summary, difficultyLabel(difficultyFromStorageName(key.difficulty)))
+        is SudokuRecord ->
+            stringResource(R.string.home_sudoku_summary, difficultyLabel(difficultyFromStorageName(difficulty)))
 
-        is RecordKey.Minesweeper ->
+        is MinesweeperRecord ->
             stringResource(
                 R.string.home_minesweeper_summary,
-                key.width,
-                key.height,
-                key.mines,
+                width,
+                height,
+                mines,
                 stringResource(
-                    if (key.noGuess) R.string.minesweeper_mode_no_guess else R.string.minesweeper_mode_normal,
+                    if (noGuess) R.string.minesweeper_mode_no_guess else R.string.minesweeper_mode_normal,
                 ),
             )
 
-        is RecordKey.Nonogram -> stringResource(R.string.home_nonogram_summary, key.width, key.height)
+        is NonogramRecord -> stringResource(R.string.home_nonogram_summary, width, height)
 
-        is RecordKey.Hashi ->
-            stringResource(R.string.home_hashi_summary, key.width, key.height, key.islands)
+        is HashiRecord -> stringResource(R.string.home_hashi_summary, width, height, islands)
+
+        is ArrowCubeRecord -> stringResource(R.string.home_arrow_cube_summary, width, depth, height)
     }
 
 /** Returns a duration as `m:ss`, or `h:mm:ss` past an hour. */

@@ -65,17 +65,17 @@ gh secret set ANDROID_KEY_PASSWORD --repo QualiaMinigames/QualiaMinigames-Androi
 
 ```powershell
 # 1. Core：推标签，CI 校验后发布到 crates.io
-git -C ..\Core tag -a v0.3.0 -m "qualia-minigames-core 0.3.0"
-git -C ..\Core push origin v0.3.0
+git -C ..\Core tag -a v0.4.0 -m "qualia-minigames-core 0.4.0"
+git -C ..\Core push origin v0.4.0
 
 # 2. FFI：等 crates.io 上出现 Core 的版本后，再推 FFI 的标签
-git -C ..\FFI tag -a v0.3.0 -m "qualia-minigames-ffi 0.3.0"
-git -C ..\FFI push origin v0.3.0
+git -C ..\FFI tag -a v0.4.0 -m "qualia-minigames-ffi 0.4.0"
+git -C ..\FFI push origin v0.4.0
 
 # 3. Android：等 crates.io 上出现 FFI 的版本后，推本仓库并推标签
 git push origin main
-git tag -a v0.3.0 -m "QualiaMinigames-Android 0.3.0"
-git push origin v0.3.0
+git tag -a v0.4.0 -m "QualiaMinigames-Android 0.4.0"
+git push origin v0.4.0
 ```
 
 本仓库的 CI 默认从 crates.io 取 `qualia-minigames-ffi`，与发布构建看到的是同一份来源。
@@ -88,9 +88,9 @@ git push origin v0.3.0
 ## 三个仓库的版本号互相独立
 
 `Core` 与 `FFI` 的版本号只对 Rust 依赖有意义，应用的 `versionName` 由
-`app/build.gradle.kts` 决定。三者的数字不要求一致：本次 0.3.0 是数织与数桥落地的版本，
-三个仓库恰好同号，而应用 0.1.0 曾经用 Core/FFI 0.1.1（修复在核心库里发版，应用的对外
-版本只在界面或行为对用户可见地改变时才动）。
+`app/build.gradle.kts` 决定。三者的数字不要求一致：本次 0.4.0 是箭立方与 typed record 落地
+的版本，三个仓库恰好同号，而应用 0.1.0 曾经用 Core/FFI 0.1.1（修复在核心库里发版，应用的
+对外版本只在界面或行为对用户可见地改变时才动）。
 
 本仓库的 `v*` 标签触发 `.github/workflows/release.yml`：先核对标签与 `versionName` 是否
 一致，再用 Secrets 里的密钥签出 release 包、校验签名不是调试密钥、把 APK 与它的

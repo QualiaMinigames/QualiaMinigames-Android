@@ -26,7 +26,7 @@
 | 项 | 值 |
 |---|---|
 | applicationId | `com.qiushui1012.app.minigames` |
-| 版本 | `0.3.1`（versionCode 5） |
+| 版本 | `0.4.0`（versionCode 6） |
 | minSdk | 26 |
 | targetSdk | 36 |
 | compileSdk | 35 |
@@ -35,8 +35,9 @@
 | 许可证 | `Apache-2.0` |
 
 玩法为接水管（4 到 35 格，平边与跨边）、数独（标准 9×9，三档难度）、扫雷（宽高各 4 到
-128，普通与无猜两种模式）、数织（宽高各 4 到 64，验证唯一解）与数桥（宽高各 4 到 35 个
-格点，以桥连接各岛）。题目全部由种子在本地生成，不联网。
+128，普通与无猜两种模式）、数织（宽高各 4 到 64，验证唯一解）、数桥（宽高各 4 到 35 个
+格点，以桥连接各岛）与箭立方（宽、深、高各 5 到 30 的实心长方体，按箭头方向取出方块）。
+题目全部由种子在本地生成，不联网。
 
 ## 目录与依赖
 
@@ -59,7 +60,7 @@ QualiaMinigames/               （工作区根，三个仓库平铺）
 # 方式一：指向本地 FFI 仓库（推荐，改动立即生效）
 ./gradlew :app:assembleDebug "-Pqualia.minigames.ffi.localDir=../FFI"
 
-# 方式二：不传参数，构建会下载 crates.io 上 qualia-minigames-ffi 0.1.1 到 app/rust/
+# 方式二：不传参数，构建会下载 crates.io 上 qualia-minigames-ffi 0.4.0 到 app/rust/
 ./gradlew :app:assembleDebug
 ```
 

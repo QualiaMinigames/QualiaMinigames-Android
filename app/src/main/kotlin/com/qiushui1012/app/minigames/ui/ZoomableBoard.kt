@@ -31,8 +31,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -367,14 +365,11 @@ fun ZoomableBoard(
                 drawnWidth = boardWidth * scale,
                 drawnHeight = boardHeight * scale,
                 color = if (isDark) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.12f),
-                thickness = SHADOW_DP.dp.toPx(),
+                thickness = EDGE_SHADOW_DP.dp.toPx(),
             )
         }
     }
 }
-
-/** How wide the edge shadow is, in dp. */
-private const val SHADOW_DP = 28f
 
 /** How far the drawn board may be moved before a side is pinned to the view. */
 private fun clampPan(
@@ -388,61 +383,6 @@ private fun clampPan(
     val maxX = max(0f, (drawnWidth - view.width) / 2f)
     val maxY = max(0f, (drawnHeight - view.height) / 2f)
     return Offset(pan.x.coerceIn(-maxX, maxX), pan.y.coerceIn(-maxY, maxY))
-}
-
-/** Draws a band along every side of the view whose board edge is hidden behind it. */
-private fun DrawScope.drawEdgeShadows(
-    originX: Float,
-    originY: Float,
-    drawnWidth: Float,
-    drawnHeight: Float,
-    color: Color,
-    thickness: Float,
-) {
-    val right = originX + drawnWidth
-    val bottom = originY + drawnHeight
-    // A pixel of slack: a board that fits exactly lands on the edge with a rounding error, and
-    // a shadow that flickers on at every resize is worse than none.
-    val slack = 1f
-
-    if (originX < -slack) {
-        drawRect(
-            brush = Brush.horizontalGradient(listOf(color, Color.Transparent), startX = 0f, endX = thickness),
-            topLeft = Offset.Zero,
-            size = Size(thickness, size.height),
-        )
-    }
-    if (originY < -slack) {
-        drawRect(
-            brush = Brush.verticalGradient(listOf(color, Color.Transparent), startY = 0f, endY = thickness),
-            topLeft = Offset.Zero,
-            size = Size(size.width, thickness),
-        )
-    }
-    if (right > size.width + slack) {
-        drawRect(
-            brush =
-                Brush.horizontalGradient(
-                    listOf(Color.Transparent, color),
-                    startX = size.width - thickness,
-                    endX = size.width,
-                ),
-            topLeft = Offset(size.width - thickness, 0f),
-            size = Size(thickness, size.height),
-        )
-    }
-    if (bottom > size.height + slack) {
-        drawRect(
-            brush =
-                Brush.verticalGradient(
-                    listOf(Color.Transparent, color),
-                    startY = size.height - thickness,
-                    endY = size.height,
-                ),
-            topLeft = Offset(0f, size.height - thickness),
-            size = Size(size.width, thickness),
-        )
-    }
 }
 
 /** Returns the cell a point falls in, or null when it misses the board. */

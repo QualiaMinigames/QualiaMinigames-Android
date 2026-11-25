@@ -246,9 +246,11 @@ const val SIZE_SLIDER_MAX = 35
 /**
  * A size field above a slider that covers the range a game is actually played at.
  *
- * [note] is the line under the slider that says what its range is, which differs per game: a
- * minesweeper board's slider covers a density the field goes beyond, and a nonogram's covers
- * 4 to 35 of a range that reaches 64.
+ * [sliderMaximum] is where the slider ends, which is [SIZE_SLIDER_MAX] for the games whose
+ * field reaches past it and the field's own maximum for a game whose range is narrower than
+ * that constant. [note] is the line under the slider that says what its range is, and a game
+ * that says the same thing three times passes it once. [enabled] turns both controls off
+ * together while a board is being generated.
  */
 @Composable
 fun SizeControl(
@@ -257,7 +259,9 @@ fun SizeControl(
     text: String,
     minimum: Int,
     maximum: Int,
-    note: String,
+    sliderMaximum: Int = SIZE_SLIDER_MAX,
+    note: String? = null,
+    enabled: Boolean = true,
     onText: (String) -> Unit,
     onSlider: (Int) -> Unit,
 ) {
@@ -270,6 +274,7 @@ fun SizeControl(
         // the slider's range is a size the board accepts, so it is not an error: the slider
         // simply sits at its end, which is what the note below says.
         isError = text.toIntOrNull()?.let { it !in minimum..maximum } ?: true,
+        enabled = enabled,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         modifier = Modifier.fillMaxWidth(),
     )
@@ -277,14 +282,17 @@ fun SizeControl(
         // A value above the slider's range holds the slider at its last position rather than
         // making it disappear: the field is where the value is read, and the slider is where
         // the range is felt.
-        value = value.coerceIn(minimum, SIZE_SLIDER_MAX).toFloat(),
-        onValueChange = { onSlider(it.toInt().coerceIn(minimum, SIZE_SLIDER_MAX)) },
-        valueRange = minimum.toFloat()..SIZE_SLIDER_MAX.toFloat(),
-        steps = SIZE_SLIDER_MAX - minimum - 1,
+        value = value.coerceIn(minimum, sliderMaximum).toFloat(),
+        onValueChange = { onSlider(it.toInt().coerceIn(minimum, sliderMaximum)) },
+        valueRange = minimum.toFloat()..sliderMaximum.toFloat(),
+        steps = (sliderMaximum - minimum - 1).coerceAtLeast(0),
+        enabled = enabled,
     )
-    Text(
-        note,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+    note?.let {
+        Text(
+            it,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }

@@ -16,9 +16,12 @@ package com.qiushui1012.app.minigames.ui
 
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
@@ -131,5 +134,60 @@ class NewGameFormsTest {
         islands.performTextClearance()
         islands.performTextInput("40%")
         compose.onNodeWithText(start()).assertIsNotEnabled()
+    }
+
+    @Test
+    fun the_arrow_cube_form_opens_at_ten_by_ten_by_ten() {
+        compose.setContent {
+            ArrowCubeNewGameDialog(container = container(), settings = Settings(), onDismiss = {}, onStart = {})
+        }
+        compose.onNodeWithText(context().getString(R.string.arrow_cube_width_range)).assertExists()
+        compose.onNodeWithText(context().getString(R.string.arrow_cube_depth_range)).assertExists()
+        compose.onNodeWithText(context().getString(R.string.arrow_cube_height_range)).assertExists()
+        compose.onNodeWithText(context().getString(R.string.arrow_cube_slider_ticks)).assertExists()
+        for (index in 0..2) {
+            compose.onAllNodes(hasSetTextAction())[index].assertTextContains("10")
+        }
+        compose.onNodeWithText(start()).assertIsEnabled()
+    }
+
+    @Test
+    fun the_arrow_cube_fields_accept_five_and_thirty_and_refuse_thirty_one() {
+        compose.setContent {
+            ArrowCubeNewGameDialog(container = container(), settings = Settings(), onDismiss = {}, onStart = {})
+        }
+        val width = compose.onAllNodes(hasSetTextAction())[0]
+        width.performTextClearance()
+        width.performTextInput("5")
+        compose.onNodeWithText(start()).assertIsEnabled()
+
+        width.performTextClearance()
+        width.performTextInput("30")
+        compose.onNodeWithText(start()).assertIsEnabled()
+
+        width.performTextClearance()
+        width.performTextInput("31")
+        compose.onNodeWithText(start()).assertIsNotEnabled()
+    }
+
+    @Test
+    fun the_arrow_cube_form_says_it_is_generating_and_stops_starting() {
+        // The start callback is a no-op here, so the form stays in its generating state after
+        // the board is made: that is what lets the assertion see the state rather than race it.
+        compose.setContent {
+            ArrowCubeNewGameDialog(container = container(), settings = Settings(), onDismiss = {}, onStart = {})
+        }
+        compose.onNodeWithText(start()).performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(start()).assertIsNotEnabled()
+        compose.onNodeWithText(context().getString(R.string.arrow_cube_generating)).assertExists()
+    }
+
+    @Test
+    fun the_arrow_cube_form_scrolls_to_its_seed_field() {
+        compose.setContent {
+            ArrowCubeNewGameDialog(container = container(), settings = Settings(), onDismiss = {}, onStart = {})
+        }
+        compose.onNodeWithText(context().getString(R.string.dialog_seed)).performScrollTo().assertExists()
     }
 }

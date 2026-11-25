@@ -82,6 +82,18 @@
 
     <string name="home_hashi_name">数桥</string>
     <string name="home_hashi_summary">%1$d×%2$d，%3$d 座岛</string>
+    <string name="home_arrow_cube_name">箭立方</string>
+    <string name="home_arrow_cube_summary">%1$d×%2$d×%3$d</string>
+    <string name="arrow_cube_width_range">宽度（5~30）</string>
+    <string name="arrow_cube_depth_range">深度（5~30）</string>
+    <string name="arrow_cube_height_range">高度（5~30）</string>
+    <string name="arrow_cube_slider_ticks">滑块范围 5~30</string>
+    <string name="arrow_cube_generating">正在生成盘面</string>
+    <string name="arrow_cube_generate_failed">无法生成此盘面，请重试</string>
+    <string name="arrow_cube_mistakes">点错 %1$d 次</string>
+    <string name="arrow_cube_won">已完成</string>
+    <string name="records_mistakes">%1$d 次点错</string>
+    <string name="records_no_best">-</string>
     <string name="hashi_width_range">宽度（4~35 个格点）</string>
     <string name="hashi_height_range">高度（4~35 个格点）</string>
     <string name="hashi_islands">岛数</string>
@@ -166,6 +178,7 @@
     <string name="cd_pipes_board">接水管棋盘</string>
     <string name="cd_sudoku_board">数独棋盘</string>
     <string name="cd_minesweeper_board">扫雷棋盘</string>
+    <string name="cd_arrow_cube_board">箭立方棋盘</string>
     <string name="cd_copy_seed">复制种子</string>
     <string name="cd_zoom_in">放大</string>
     <string name="cd_zoom_out">缩小</string>

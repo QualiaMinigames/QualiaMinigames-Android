@@ -92,6 +92,18 @@
     <!-- Hashi -->
     <string name="home_hashi_name">Hashi</string>
     <string name="home_hashi_summary">%1$d×%2$d, %3$d islands</string>
+    <string name="home_arrow_cube_name">Arrow Cube</string>
+    <string name="home_arrow_cube_summary">%1$d×%2$d×%3$d</string>
+    <string name="arrow_cube_width_range">Width (5–30)</string>
+    <string name="arrow_cube_depth_range">Depth (5–30)</string>
+    <string name="arrow_cube_height_range">Height (5–30)</string>
+    <string name="arrow_cube_slider_ticks">Slider range 5–30</string>
+    <string name="arrow_cube_generating">Generating the board</string>
+    <string name="arrow_cube_generate_failed">This board could not be generated. Try again.</string>
+    <string name="arrow_cube_mistakes">Mistakes %1$d</string>
+    <string name="arrow_cube_won">Solved</string>
+    <string name="records_mistakes">%1$d mistakes</string>
+    <string name="records_no_best">-</string>
     <string name="hashi_width_range">Width (4–35 points)</string>
     <string name="hashi_height_range">Height (4–35 points)</string>
     <string name="hashi_islands">Islands</string>
@@ -181,6 +193,7 @@
     <string name="cd_pipes_board">Pipes board</string>
     <string name="cd_sudoku_board">Sudoku board</string>
     <string name="cd_minesweeper_board">Minesweeper board</string>
+    <string name="cd_arrow_cube_board">Arrow Cube board</string>
     <string name="cd_copy_seed">Copy the seed</string>
     <string name="cd_zoom_in">Zoom in</string>
     <string name="cd_zoom_out">Zoom out</string>

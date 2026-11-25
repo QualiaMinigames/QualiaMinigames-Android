@@ -14,6 +14,11 @@
 
 package com.qiushui1012.app.minigames.rules
 
+import com.qiushui1012.app.minigames.ffi.ArrowCubeAxis as FfiArrowCubeAxis
+import com.qiushui1012.app.minigames.ffi.ArrowCubeBlock as FfiArrowCubeBlock
+import com.qiushui1012.app.minigames.ffi.ArrowCubeDirection as FfiArrowCubeDirection
+import com.qiushui1012.app.minigames.ffi.ArrowCubeGame as FfiArrowCubeGame
+import com.qiushui1012.app.minigames.ffi.ArrowCubeTake as FfiArrowCubeTake
 import com.qiushui1012.app.minigames.ffi.BridgeInfo as FfiBridgeInfo
 import com.qiushui1012.app.minigames.ffi.ClueLine as FfiClueLine
 import com.qiushui1012.app.minigames.ffi.HashiGame as FfiHashiGame
@@ -29,6 +34,9 @@ import com.qiushui1012.app.minigames.ffi.SudokuDifficulty as FfiSudokuDifficulty
 import com.qiushui1012.app.minigames.ffi.SudokuGame as FfiSudokuGame
 import com.qiushui1012.app.minigames.ffi.dailySeed as ffiDailySeed
 import com.qiushui1012.app.minigames.ffi.coreVersion as ffiCoreVersion
+import com.qiushui1012.app.minigames.ffi.arrowCubeGenerationVersion as ffiArrowCubeGenerationVersion
+import com.qiushui1012.app.minigames.ffi.arrowCubeMaxSize as ffiArrowCubeMaxSize
+import com.qiushui1012.app.minigames.ffi.arrowCubeMinSize as ffiArrowCubeMinSize
 import com.qiushui1012.app.minigames.ffi.hashiIslandPerMilleMax as ffiHashiIslandPerMilleMax
 import com.qiushui1012.app.minigames.ffi.hashiIslandPerMilleMin as ffiHashiIslandPerMilleMin
 import com.qiushui1012.app.minigames.ffi.hashiIslandSnapPerMille as ffiHashiIslandSnapPerMille
@@ -130,6 +138,71 @@ enum class MinesweeperEvent {
     /** The cell could not be opened. */
     Ignored,
 }
+
+/** The axis an arrow cube block lies along. */
+enum class ArrowCubeAxis {
+    /** The x axis, towards the east. */
+    X,
+
+    /** The y axis, towards the north. */
+    Y,
+
+    /** The z axis, upwards. */
+    Z,
+}
+
+/** The direction an arrow cube block points in. */
+enum class ArrowCubeDirection {
+    /** Towards larger x. */
+    East,
+
+    /** Towards smaller x. */
+    West,
+
+    /** Towards larger y. */
+    North,
+
+    /** Towards smaller y. */
+    South,
+
+    /** Towards larger z. */
+    Up,
+
+    /** Towards smaller z. */
+    Down,
+}
+
+/** One block of an arrow cube board. */
+data class ArrowCubeBlock(
+    /** The block's index in the board's fixed block table. */
+    val index: Int,
+    /** The x coordinate of the low cell. */
+    val x: Int,
+    /** The y coordinate of the low cell. */
+    val y: Int,
+    /** The z coordinate of the low cell. */
+    val z: Int,
+    /** The axis the block is long along. */
+    val axis: ArrowCubeAxis,
+    /** How many cells the block covers, one or two. */
+    val length: Int,
+    /** The direction its arrow points. */
+    val direction: ArrowCubeDirection,
+    /** Whether the block has been taken out. */
+    val removed: Boolean,
+)
+
+/** What one tap on an arrow cube block did. */
+data class ArrowCubeTake(
+    /** Whether the block left the board. */
+    val removed: Boolean,
+    /** The block that stopped it, when one did. */
+    val blocker: Int?,
+    /** How many empty cells lie between the moving block and the blocker. */
+    val gap: Int,
+    /** Whether the board is finished after this take. */
+    val solved: Boolean,
+)
 
 /** The sides a pipe piece can join, as bits of a mask. */
 object PipesSide {
@@ -455,6 +528,51 @@ interface HashiBoard {
     fun toSnapshot(): ByteArray
 }
 
+/** One game of arrow cube. */
+interface ArrowCubeBoard {
+    /** The number of cells along x. */
+    val width: Int
+
+    /** The number of cells along y. */
+    val depth: Int
+
+    /** The number of cells along z. */
+    val height: Int
+
+    /** The number of cells in the box. */
+    val cellCount: Int
+
+    /** How many blocks the board was generated with. */
+    val blockCount: Int
+
+    /** How many blocks are still in the box. */
+    val remainingCount: Int
+
+    /** The seed the board was generated from. */
+    val seed: Long
+
+    /** How many takes have met a blocker. */
+    val mistakes: Int
+
+    /**
+     * Returns every block, taken ones included, in the board's fixed order.
+     *
+     * A screen reads this once when it enters the game and tracks the taken blocks locally:
+     * a take changes one block, and rereading all of them for every frame would cross the
+     * language boundary with thousands of records.
+     */
+    fun blocks(): List<ArrowCubeBlock>
+
+    /** Takes a block out along its arrow. */
+    fun take(index: Int): ArrowCubeTake
+
+    /** Returns whether every block has left. */
+    fun isSolved(): Boolean
+
+    /** Writes the game, so it can be saved. */
+    fun toSnapshot(): ByteArray
+}
+
 /**
  * The rules the application plays by.
  *
@@ -691,6 +809,38 @@ object Rules {
     fun hashiFromSnapshot(bytes: ByteArray): HashiBoard? =
         try {
             FfiHashiGame.fromSnapshot(bytes).let(::Hashi)
+        } catch (_: Exception) {
+            null
+        }
+
+    /** Returns the smallest arrow cube board, in cells on a side. */
+    fun arrowCubeMinSize(): Int = ffiArrowCubeMinSize().toInt()
+
+    /** Returns the largest arrow cube board, in cells on a side. */
+    fun arrowCubeMaxSize(): Int = ffiArrowCubeMaxSize().toInt()
+
+    /** Returns the generation version the arrow cube boards are drawn under. */
+    fun arrowCubeGenerationVersion(): Int = ffiArrowCubeGenerationVersion().toInt()
+
+    /**
+     * Generates an arrow cube box.
+     *
+     * Returns null when a side is outside its range, which the dialog validates before it calls
+     * this: a box that broke its own parameters is a programming error rather than a state a
+     * player reaches.
+     */
+    fun newArrowCube(width: Int, depth: Int, height: Int, seed: Long): ArrowCubeBoard? =
+        try {
+            FfiArrowCubeGame(width.toUInt(), depth.toUInt(), height.toUInt(), seed.toULong())
+                .let(::ArrowCube)
+        } catch (_: Exception) {
+            null
+        }
+
+    /** Reads a saved arrow cube game, or returns null when the bytes are not one. */
+    fun arrowCubeFromSnapshot(bytes: ByteArray): ArrowCubeBoard? =
+        try {
+            FfiArrowCubeGame.fromSnapshot(bytes).let(::ArrowCube)
         } catch (_: Exception) {
             null
         }
@@ -957,6 +1107,80 @@ private class Hashi(private val game: FfiHashiGame) : HashiBoard {
     override fun toggleMark(index: Int): Boolean = game.toggleMark(index.toUInt())
 
     override fun strandedIslands(): List<Int> = game.strandedIslands().map { it.toInt() }
+
+    override fun isSolved(): Boolean = game.isSolved()
+
+    override fun toSnapshot(): ByteArray = game.toSnapshot()
+}
+
+/** Returns the axis the bindings name. */
+private fun FfiArrowCubeAxis.toModel(): ArrowCubeAxis =
+    when (this) {
+        FfiArrowCubeAxis.X -> ArrowCubeAxis.X
+        FfiArrowCubeAxis.Y -> ArrowCubeAxis.Y
+        FfiArrowCubeAxis.Z -> ArrowCubeAxis.Z
+    }
+
+/** Returns the direction the bindings name. */
+private fun FfiArrowCubeDirection.toModel(): ArrowCubeDirection =
+    when (this) {
+        FfiArrowCubeDirection.EAST -> ArrowCubeDirection.East
+        FfiArrowCubeDirection.WEST -> ArrowCubeDirection.West
+        FfiArrowCubeDirection.NORTH -> ArrowCubeDirection.North
+        FfiArrowCubeDirection.SOUTH -> ArrowCubeDirection.South
+        FfiArrowCubeDirection.UP -> ArrowCubeDirection.Up
+        FfiArrowCubeDirection.DOWN -> ArrowCubeDirection.Down
+    }
+
+/**
+ * Wraps the generated arrow cube object.
+ *
+ * The values that change while a game is played — the remaining count, the mistakes and the
+ * solved check — are read from the rules on every access rather than kept as properties, for
+ * the reason given on [Minesweeper]: a captured value would be the board before the take.
+ */
+private class ArrowCube(private val game: FfiArrowCubeGame) : ArrowCubeBoard {
+    override val width: Int = game.width().toInt()
+
+    override val depth: Int = game.depth().toInt()
+
+    override val height: Int = game.height().toInt()
+
+    override val cellCount: Int = game.cellCount().toInt()
+
+    override val blockCount: Int = game.blockCount().toInt()
+
+    override val remainingCount: Int
+        get() = game.remainingCount().toInt()
+
+    override val seed: Long = game.seed().toLong()
+
+    override val mistakes: Int
+        get() = game.mistakes().toInt()
+
+    override fun blocks(): List<ArrowCubeBlock> =
+        game.blocks().map { block ->
+            ArrowCubeBlock(
+                index = block.index.toInt(),
+                x = block.x.toInt(),
+                y = block.y.toInt(),
+                z = block.z.toInt(),
+                axis = block.axis.toModel(),
+                length = block.length.toInt(),
+                direction = block.direction.toModel(),
+                removed = block.removed,
+            )
+        }
+
+    override fun take(index: Int): ArrowCubeTake {
+        val result: FfiArrowCubeTake = game.take(index.toUInt())
+        return ArrowCubeTake(
+            removed = result.removed,
+            blocker = result.blocker?.toInt(),
+            gap = result.gap.toInt(),
+            solved = result.solved,
+        )
+    }
 
     override fun isSolved(): Boolean = game.isSolved()
 

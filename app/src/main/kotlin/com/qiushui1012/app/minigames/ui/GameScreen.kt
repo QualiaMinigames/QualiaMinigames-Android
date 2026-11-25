@@ -41,12 +41,12 @@ import com.qiushui1012.app.minigames.AppContainer
 import com.qiushui1012.app.minigames.DurationFont
 import com.qiushui1012.app.minigames.GameInProgress
 import com.qiushui1012.app.minigames.R
-import com.qiushui1012.app.minigames.difficultyFromStorageName
 import com.qiushui1012.app.minigames.Space
 import com.qiushui1012.app.minigames.data.GameKind
-import com.qiushui1012.app.minigames.data.Record
+import com.qiushui1012.app.minigames.data.Play
 import com.qiushui1012.app.minigames.data.SavedGame
 import com.qiushui1012.app.minigames.data.Settings
+import com.qiushui1012.app.minigames.data.append
 import kotlinx.coroutines.launch
 
 /**
@@ -85,6 +85,11 @@ fun GameScreen(
     var remainingMines by remember(game) { mutableStateOf(minesweeper?.board?.remainingMines ?: 0) }
     var mineCount by remember(game) { mutableStateOf(minesweeper?.board?.mineCount ?: 0) }
 
+    // The mistakes an arrow cube board has counted, held here for the same reason: the header
+    // is above the board and has to follow a take the board has just made.
+    val arrowCube = game as? GameInProgress.ArrowCube
+    var mistakes by remember(game) { mutableStateOf(arrowCube?.board?.mistakes ?: 0) }
+
     // The clock is driven by the recomposition of the header rather than by a coroutine that
     // outlives the screen: a game that is not on screen is not being timed, which is what the
     // saved seconds mean. A finished game stops it too, which matters for the board that stays
@@ -117,6 +122,9 @@ fun GameScreen(
 
                 is GameInProgress.Hashi ->
                     SavedGame(GameKind.Hashi, game.board.toSnapshot(), game.playerName, elapsed, System.currentTimeMillis())
+
+                is GameInProgress.ArrowCube ->
+                    SavedGame(GameKind.ArrowCube, game.board.toSnapshot(), game.playerName, elapsed, System.currentTimeMillis())
             }
         // A save the player made by leaving must outlive the screen, for the same reason the
         // record does.
@@ -137,23 +145,25 @@ fun GameScreen(
             return
         }
         finished = true
-        val record =
-            Record(
-                key = game.key,
+        // The play carries the facts an older record kept as fields of its own: who played,
+        // how long it took, when it finished, which puzzle it was and how it started. The
+        // game's parameters, which decide the group, come from the board instead.
+        val play =
+            Play(
                 playerName = game.playerName,
                 seconds = elapsed,
                 finishedAt = System.currentTimeMillis(),
                 seed = game.seed,
                 failed = failed,
                 typedSeed = game.typedSeed,
+                mistakes = (game as? GameInProgress.ArrowCube)?.board?.mistakes,
             )
+        val group = game.key.append(play)
         // The record is written in the container's scope, not this screen's: leaving the
         // screen cancels a scope the screen owns, and the write would be cancelled with it,
-        // which is a game that finishes and leaves no record behind.
-        container.scope.launch {
-            container.records.addRecord(record)
-            container.records.clearSave(game.kind)
-        }
+        // which is a game that finishes and leaves no record behind. Adding the play also
+        // clears the game's save, so the two states cannot disagree after a crash.
+        container.scope.launch { container.records.addPlay(group) }
         if (navigate) {
             onFinished()
         }
@@ -170,6 +180,7 @@ fun GameScreen(
             elapsed = elapsed,
             mines = if (minesweeper != null) remainingMines else null,
             mineTotal = mineCount,
+            mistakes = if (arrowCube != null) mistakes else null,
             onUndo = {
                 when (game) {
                     is GameInProgress.Pipes -> game.board.undo()
@@ -181,6 +192,8 @@ fun GameScreen(
                     // through zero, so neither needs an undo step.
                     is GameInProgress.Nonogram -> Unit
                     is GameInProgress.Hashi -> Unit
+                    // An arrow cube take is final: the header draws no undo button for it.
+                    is GameInProgress.ArrowCube -> Unit
                 }
             },
             onBack = {
@@ -230,6 +243,13 @@ fun GameScreen(
                     settings = settings,
                     onSolved = ::finish,
                 )
+
+            is GameInProgress.ArrowCube ->
+                ArrowCubePlay(
+                    board = game.board,
+                    onMistakes = { mistakes = it },
+                    onSolved = ::finish,
+                )
         }
     }
 
@@ -269,6 +289,7 @@ private fun GameHeader(
     elapsed: Long,
     mines: Int?,
     mineTotal: Int,
+    mistakes: Int?,
     onUndo: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -295,14 +316,25 @@ private fun GameHeader(
                 fontFamily = DurationFont,
             )
         }
+        if (mistakes != null) {
+            // The same place the minesweeper counter takes, for the same reason: it is a
+            // count about the game, read before the clock that says how long it has taken.
+            Text(
+                stringResource(R.string.arrow_cube_mistakes, mistakes),
+                style = MaterialTheme.typography.labelLarge,
+                fontFamily = DurationFont,
+            )
+        }
         Text(formatDuration(elapsed), style = MaterialTheme.typography.titleMedium, fontFamily = DurationFont)
         when (game) {
             // Minesweeper has no undo, so the header offers none: a button that did nothing
-            // would be a control the player would press and then wonder about. Nonogram and
-            // hashi are the same: every tap undoes itself where it stands.
+            // would be a control the player would press and then wonder about. Nonogram,
+            // hashi and arrow cube are the same: a tap is final, or undoes itself where it
+            // stands.
             is GameInProgress.Minesweeper -> Unit
             is GameInProgress.Nonogram -> Unit
             is GameInProgress.Hashi -> Unit
+            is GameInProgress.ArrowCube -> Unit
             else -> TextButton(onClick = onUndo) { Text(stringResource(R.string.play_undo)) }
         }
     }
@@ -310,4 +342,4 @@ private fun GameHeader(
 
 /** Returns the label of the parameters a game is played with. */
 @Composable
-private fun keyLabelOf(game: GameInProgress): String = keyLabel(game.key)
+private fun keyLabelOf(game: GameInProgress): String = game.key.keyLabel()

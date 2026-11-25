@@ -14,9 +14,19 @@
 
 package com.qiushui1012.app.minigames
 
+import com.qiushui1012.app.minigames.data.ArrowCubeRecord
 import com.qiushui1012.app.minigames.data.GameKind
-import com.qiushui1012.app.minigames.data.Record
-import com.qiushui1012.app.minigames.data.RecordKey
+import com.qiushui1012.app.minigames.data.GameRecord
+import com.qiushui1012.app.minigames.data.HashiRecord
+import com.qiushui1012.app.minigames.data.MinesweeperRecord
+import com.qiushui1012.app.minigames.data.NonogramRecord
+import com.qiushui1012.app.minigames.data.PipesRecord
+import com.qiushui1012.app.minigames.data.Play
+import com.qiushui1012.app.minigames.data.SudokuRecord
+import com.qiushui1012.app.minigames.data.append
+import com.qiushui1012.app.minigames.data.groupKey
+import com.qiushui1012.app.minigames.data.kind
+import com.qiushui1012.app.minigames.data.sortedRecords
 import com.qiushui1012.app.minigames.rules.MinesweeperCell
 import com.qiushui1012.app.minigames.rules.MinesweeperEvent
 import com.qiushui1012.app.minigames.rules.MinesweeperMode
@@ -26,7 +36,6 @@ import com.qiushui1012.app.minigames.rules.PipesLayout
 import com.qiushui1012.app.minigames.rules.Rules
 import com.qiushui1012.app.minigames.rules.SudokuDifficulty
 import com.qiushui1012.app.minigames.ui.formatDuration
-import com.qiushui1012.app.minigames.ui.groupRecords
 import com.qiushui1012.app.minigames.ui.recordsByKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -355,114 +364,335 @@ class RulesTest {
         assertEquals(2, Rules.hashiIslandsForPerMille(16, 100))
         assertEquals(429, Rules.hashiIslandsForPerMille(1225, 350))
     }
+
+    @Test
+    fun an_arrow_cube_board_answers_its_shape_and_its_seed() {
+        val board = requireNotNull(Rules.newArrowCube(6, 5, 5, 4_242))
+        assertEquals(6, board.width)
+        assertEquals(5, board.depth)
+        assertEquals(5, board.height)
+        assertEquals(150, board.cellCount)
+        assertEquals(board.blockCount, board.blocks().size)
+        assertEquals(board.blockCount, board.remainingCount)
+        assertEquals(4_242L, board.seed)
+        assertEquals(0, board.mistakes)
+        assertFalse(board.isSolved())
+    }
+
+    @Test
+    fun the_same_arrow_cube_seed_reaches_the_same_blocks() {
+        val first = requireNotNull(Rules.newArrowCube(5, 5, 5, 7))
+        val second = requireNotNull(Rules.newArrowCube(5, 5, 5, 7))
+        assertEquals(first.blocks(), second.blocks())
+    }
+
+    @Test
+    fun an_arrow_cube_take_reports_its_success_and_its_mistake() {
+        val board = requireNotNull(Rules.newArrowCube(5, 5, 5, 3))
+        var failed = 0
+        var taken = false
+        for (index in 0 until board.blockCount) {
+            val result = board.take(index)
+            if (result.removed) {
+                taken = true
+                break
+            }
+            failed += 1
+            assertNotNull("a refused take names its blocker", result.blocker)
+            assertTrue(result.gap >= 0)
+        }
+        assertTrue("a generated board offers a block", taken)
+        assertEquals(failed, board.mistakes)
+        assertEquals(board.blockCount - 1, board.remainingCount)
+    }
+
+    @Test
+    fun an_arrow_cube_index_outside_the_table_changes_nothing() {
+        val board = requireNotNull(Rules.newArrowCube(5, 5, 5, 5))
+        val before = board.blocks()
+        val result = board.take(10_000)
+        assertFalse(result.removed)
+        assertNull(result.blocker)
+        assertEquals(0, result.gap)
+        assertFalse(result.solved)
+        assertEquals(before, board.blocks())
+        assertEquals(0, board.mistakes)
+    }
+
+    @Test
+    fun an_arrow_cube_snapshot_round_trips() {
+        val board = requireNotNull(Rules.newArrowCube(5, 5, 5, 13))
+        var taken = false
+        for (index in 0 until board.blockCount) {
+            if (board.take(index).removed) {
+                taken = true
+                break
+            }
+        }
+        assertTrue(taken)
+        val restored = requireNotNull(Rules.arrowCubeFromSnapshot(board.toSnapshot()))
+        assertEquals(board.blocks(), restored.blocks())
+        assertEquals(board.mistakes, restored.mistakes)
+        assertEquals(board.remainingCount, restored.remainingCount)
+        assertEquals(board.seed, restored.seed)
+    }
+
+    @Test
+    fun an_arrow_cube_board_outside_its_range_is_refused() {
+        assertNull(Rules.newArrowCube(4, 5, 5, 0))
+        assertNull(Rules.newArrowCube(5, 31, 5, 0))
+        assertNull(Rules.newArrowCube(31, 5, 5, 0))
+        assertNull(Rules.newArrowCube(5, 5, 4, 0))
+        assertNull(Rules.newArrowCube(5, 5, 31, 0))
+    }
 }
 
-/** The records screen's grouping and formatting, which are pure functions over its data. */
+/**
+ * The records page's grouping and formatting, which are pure functions over its data.
+ *
+ * The store returns its groups already sorted, and these tests drive the same comparator
+ * through a list of groups rather than through a live store: the order is a fact about the
+ * parameters, not about where the file was read.
+ */
 class RecordsGroupingTest {
-    /** Returns a finished pipes game. */
-    private fun pipes(size: Int, wrapped: Boolean, seconds: Long) =
-        Record(RecordKey.Pipes(size, wrapped), "Tester", seconds, 1_000)
+    /** Returns a group with one finished play in it. */
+    private fun finished(
+        record: GameRecord,
+        seconds: Long = 10,
+        failed: Boolean? = null,
+        mistakes: Int? = null,
+    ): GameRecord =
+        record.append(
+            Play(
+                playerName = "Tester",
+                seconds = seconds,
+                finishedAt = 1_000,
+                failed = failed,
+                mistakes = mistakes,
+            ),
+        )
 
-    /** Returns a finished sudoku game. */
-    private fun sudoku(difficulty: String, seconds: Long) =
-        Record(RecordKey.Sudoku(difficulty), "Tester", seconds, 1_000)
+    /** Returns a finished pipes group. */
+    private fun pipes(
+        size: Int,
+        wrapped: Boolean = false,
+        seconds: Long = 10,
+    ) = finished(PipesRecord(size, wrapped), seconds)
 
-    /** Returns a finished minesweeper game. */
+    /** Returns a finished sudoku group. */
+    private fun sudoku(
+        difficulty: String,
+        seconds: Long = 10,
+    ) = finished(SudokuRecord(difficulty), seconds)
+
+    /** Returns a finished minesweeper group. */
     private fun minesweeper(
         width: Int,
         height: Int,
         mines: Int,
-        noGuess: Boolean,
-        seconds: Long,
-        failed: Boolean? = null,
-    ) = Record(RecordKey.Minesweeper(width, height, mines, noGuess), "Tester", seconds, 1_000, failed = failed)
+        noGuess: Boolean = false,
+        seconds: Long = 10,
+    ) = finished(MinesweeperRecord(width, height, mines, noGuess), seconds)
 
-    /** Returns a finished nonogram game. */
-    private fun nonogram(width: Int, height: Int, seconds: Long) =
-        Record(RecordKey.Nonogram(width, height), "Tester", seconds, 1_000)
+    /** Returns a finished nonogram group. */
+    private fun nonogram(
+        width: Int,
+        height: Int,
+        seconds: Long = 10,
+    ) = finished(NonogramRecord(width, height), seconds)
 
-    /** Returns a finished hashi game. */
-    private fun hashi(width: Int, height: Int, islands: Int, seconds: Long) =
-        Record(RecordKey.Hashi(width, height, islands), "Tester", seconds, 1_000)
+    /** Returns a finished hashi group. */
+    private fun hashi(
+        width: Int,
+        height: Int,
+        islands: Int,
+        seconds: Long = 10,
+    ) = finished(HashiRecord(width, height, islands), seconds)
+
+    /** Returns a finished arrow cube group. */
+    private fun arrowCube(
+        width: Int,
+        depth: Int,
+        height: Int,
+        seconds: Long = 10,
+        mistakes: Int? = null,
+    ) = finished(ArrowCubeRecord(width, depth, height), seconds, mistakes = mistakes)
 
     @Test
     fun pipes_groups_come_before_sudoku_and_are_ordered_by_size() {
         val groups =
-            groupRecords(
-                listOf(
-                    sudoku("hard", 10),
-                    pipes(15, false, 10),
-                    pipes(9, true, 10),
-                    pipes(9, false, 10),
-                ),
-            )
-        assertEquals(RecordKey.Pipes(9, false), groups[0].first)
-        assertEquals(RecordKey.Pipes(9, true), groups[1].first)
-        assertEquals(RecordKey.Pipes(15, false), groups[2].first)
-        assertEquals(RecordKey.Sudoku("hard"), groups[3].first)
+            listOf(
+                sudoku("hard"),
+                pipes(15),
+                pipes(9, wrapped = true),
+                pipes(9),
+            ).sortedRecords()
+        assertEquals(
+            listOf(
+                PipesRecord(9, wrapped = false).groupKey(),
+                PipesRecord(9, wrapped = true).groupKey(),
+                PipesRecord(15, wrapped = false).groupKey(),
+                SudokuRecord("hard").groupKey(),
+            ),
+            groups.map { it.groupKey() },
+        )
     }
 
     @Test
     fun minesweeper_groups_come_after_sudoku_and_are_ordered_by_shape_mines_and_mode() {
         val groups =
-            groupRecords(
-                listOf(
-                    minesweeper(9, 9, 10, false, 10),
-                    sudoku("easy", 10),
-                    minesweeper(9, 9, 10, true, 10),
-                    minesweeper(16, 16, 40, false, 10),
-                    minesweeper(9, 9, 12, false, 10),
-                ),
-            )
+            listOf(
+                minesweeper(9, 9, 10),
+                sudoku("easy"),
+                minesweeper(9, 9, 10, noGuess = true),
+                minesweeper(16, 16, 40),
+                minesweeper(9, 9, 12),
+            ).sortedRecords()
         assertEquals(
             listOf(
-                RecordKey.Sudoku("easy"),
-                RecordKey.Minesweeper(9, 9, 10, noGuess = false),
-                RecordKey.Minesweeper(9, 9, 10, noGuess = true),
-                RecordKey.Minesweeper(9, 9, 12, noGuess = false),
-                RecordKey.Minesweeper(16, 16, 40, noGuess = false),
+                SudokuRecord("easy").groupKey(),
+                MinesweeperRecord(9, 9, 10, noGuess = false).groupKey(),
+                MinesweeperRecord(9, 9, 10, noGuess = true).groupKey(),
+                MinesweeperRecord(9, 9, 12, noGuess = false).groupKey(),
+                MinesweeperRecord(16, 16, 40, noGuess = false).groupKey(),
             ),
-            groups.map { it.first },
+            groups.map { it.groupKey() },
         )
-        assertEquals(listOf(GameKind.Minesweeper), recordsByKind(listOf(minesweeper(9, 9, 10, false, 1))).map { it.first })
     }
 
     @Test
-    fun a_failed_game_is_in_its_own_group_and_is_not_a_best_time() {
-        val records =
+    fun the_six_games_come_in_the_order_the_home_page_shows_them() {
+        val groups =
             listOf(
-                minesweeper(9, 9, 10, false, 30, failed = true),
-                minesweeper(9, 9, 10, false, 60),
-            )
-        // Both games belong to the same group: a loss is the same board, and filing it apart
-        // would split one board's history in two.
-        assertEquals(1, groupRecords(records).size)
-        val best = records.filter { it.failed != true }.minByOrNull { it.seconds }
-        assertEquals(60L, best?.seconds)
+                arrowCube(10, 10, 10),
+                hashi(10, 10, 15),
+                nonogram(10, 10),
+                minesweeper(9, 9, 10),
+                sudoku("easy"),
+                pipes(9),
+            ).sortedRecords()
+        assertEquals(
+            listOf(
+                GameKind.Pipes,
+                GameKind.Sudoku,
+                GameKind.Minesweeper,
+                GameKind.Nonogram,
+                GameKind.Hashi,
+                GameKind.ArrowCube,
+            ),
+            groups.map { it.kind },
+        )
     }
 
     @Test
-    fun every_record_belongs_to_exactly_one_group() {
-        val records = listOf(pipes(9, false, 10), pipes(9, false, 20), sudoku("easy", 30))
-        val groups = groupRecords(records)
-        assertEquals(records.size, groups.sumOf { it.second.size })
+    fun a_nonogram_group_is_ordered_by_its_two_sides() {
+        val groups =
+            listOf(
+                nonogram(15, 9),
+                nonogram(9, 15),
+                nonogram(9, 9),
+            ).sortedRecords()
+        assertEquals(
+            listOf(
+                NonogramRecord(9, 9).groupKey(),
+                NonogramRecord(9, 15).groupKey(),
+                NonogramRecord(15, 9).groupKey(),
+            ),
+            groups.map { it.groupKey() },
+        )
+    }
+
+    @Test
+    fun a_hashi_group_is_ordered_by_its_sides_and_its_islands() {
+        val groups =
+            listOf(
+                hashi(10, 10, 30),
+                hashi(12, 10, 15),
+                hashi(10, 10, 15),
+                hashi(10, 12, 15),
+            ).sortedRecords()
+        assertEquals(
+            listOf(
+                HashiRecord(10, 10, 15).groupKey(),
+                HashiRecord(10, 10, 30).groupKey(),
+                HashiRecord(10, 12, 15).groupKey(),
+                HashiRecord(12, 10, 15).groupKey(),
+            ),
+            groups.map { it.groupKey() },
+        )
+    }
+
+    @Test
+    fun an_arrow_cube_group_is_ordered_by_its_three_sides() {
+        val groups =
+            listOf(
+                arrowCube(10, 10, 12),
+                arrowCube(10, 12, 10),
+                arrowCube(12, 10, 10),
+                arrowCube(10, 10, 10),
+            ).sortedRecords()
+        assertEquals(
+            listOf(
+                ArrowCubeRecord(10, 10, 10).groupKey(),
+                ArrowCubeRecord(10, 10, 12).groupKey(),
+                ArrowCubeRecord(10, 12, 10).groupKey(),
+                ArrowCubeRecord(12, 10, 10).groupKey(),
+            ),
+            groups.map { it.groupKey() },
+        )
+    }
+
+    @Test
+    fun a_failed_game_is_not_a_best_time() {
+        val group =
+            MinesweeperRecord(9, 9, 10, noGuess = false)
+                .append(
+                    Play(
+                        playerName = "Tester",
+                        seconds = 30,
+                        finishedAt = 1_000,
+                        failed = true,
+                    ),
+                )
+                .append(
+                    Play(
+                        playerName = "Tester",
+                        seconds = 60,
+                        finishedAt = 2_000,
+                    ),
+                )
+        // Both plays belong to one group: a loss is the same board, and filing it apart
+        // would split one board's history in two. The best time is the won one.
+        assertEquals(2, group.history.size)
+        assertEquals(60L, group.bestSeconds)
+    }
+
+    @Test
+    fun a_tie_on_time_is_broken_by_the_mistake_count() {
+        val group =
+            ArrowCubeRecord(10, 10, 10)
+                .append(Play("Tester", 40, 1_000, mistakes = 3))
+                .append(Play("Tester", 40, 2_000, mistakes = 1))
+        assertEquals(40L, group.bestSeconds)
+        assertEquals(1, (group as ArrowCubeRecord).bestMistakes)
+    }
+
+    @Test
+    fun every_play_belongs_to_exactly_one_group() {
+        val groups = listOf(pipes(9), pipes(9), sudoku("easy")).sortedRecords()
+        assertEquals(3, groups.sumOf { it.history.size })
+        assertEquals(2, groups.count { it.kind == GameKind.Pipes })
     }
 
     @Test
     fun records_are_split_by_game_before_they_are_split_by_parameters() {
-        val records =
-            listOf(
-                sudoku("hard", 10),
-                pipes(15, false, 10),
-                sudoku("easy", 10),
-                pipes(9, true, 10),
-            )
-        val byKind = recordsByKind(records)
+        val groups = listOf(sudoku("hard"), pipes(15), sudoku("easy"), pipes(9)).sortedRecords()
+        val byKind = recordsByKind(groups)
         assertEquals(listOf(GameKind.Pipes, GameKind.Sudoku), byKind.map { it.first })
         assertEquals(2, byKind[0].second.size)
         assertEquals(2, byKind[1].second.size)
-        // A game with no records has no group, so the page draws no empty dropdown for it.
-        assertEquals(listOf(GameKind.Sudoku), recordsByKind(listOf(sudoku("easy", 1))).map { it.first })
+        // A game with no groups has no dropdown, so the page draws no empty section for it.
+        assertEquals(listOf(GameKind.Sudoku), recordsByKind(listOf(sudoku("easy"))).map { it.first })
     }
 
     @Test
@@ -471,79 +701,5 @@ class RecordsGroupingTest {
         assertEquals("1:00", formatDuration(60))
         assertEquals("1:00:00", formatDuration(3600))
         assertEquals("2:03:04", formatDuration(2 * 3600 + 3 * 60 + 4))
-    }
-
-    @Test
-    fun the_five_games_come_in_the_order_the_home_page_shows_them() {
-        val groups =
-            groupRecords(
-                listOf(
-                    hashi(10, 10, 15, 10),
-                    nonogram(10, 10, 10),
-                    minesweeper(9, 9, 10, false, 10),
-                    sudoku("easy", 10),
-                    pipes(9, false, 10),
-                ),
-            )
-        assertEquals(
-            listOf(
-                RecordKey.Pipes(9, false),
-                RecordKey.Sudoku("easy"),
-                RecordKey.Minesweeper(9, 9, 10, noGuess = false),
-                RecordKey.Nonogram(10, 10),
-                RecordKey.Hashi(10, 10, 15),
-            ),
-            groups.map { it.first },
-        )
-        assertEquals(
-            listOf(GameKind.Pipes, GameKind.Sudoku, GameKind.Minesweeper, GameKind.Nonogram, GameKind.Hashi),
-            recordsByKind(
-                listOf(
-                    pipes(9, false, 1),
-                    sudoku("easy", 1),
-                    minesweeper(9, 9, 10, false, 1),
-                    nonogram(10, 10, 1),
-                    hashi(10, 10, 15, 1),
-                ),
-            ).map { it.first },
-        )
-    }
-
-    @Test
-    fun a_nonogram_group_is_ordered_by_its_two_sides() {
-        val groups =
-            groupRecords(
-                listOf(
-                    nonogram(15, 9, 10),
-                    nonogram(9, 15, 10),
-                    nonogram(9, 9, 10),
-                ),
-            )
-        assertEquals(
-            listOf(RecordKey.Nonogram(9, 9), RecordKey.Nonogram(9, 15), RecordKey.Nonogram(15, 9)),
-            groups.map { it.first },
-        )
-    }
-
-    @Test
-    fun a_hashi_group_is_ordered_by_its_sides_and_its_islands() {
-        val groups =
-            groupRecords(
-                listOf(
-                    hashi(10, 10, 30, 10),
-                    hashi(12, 10, 15, 10),
-                    hashi(10, 10, 15, 10),
-                    hashi(10, 12, 15, 10),
-                ),
-            )
-        assertEquals(
-            listOf(
-                RecordKey.Hashi(10, 10, 15),
-                RecordKey.Hashi(10, 10, 30),
-                RecordKey.Hashi(10, 12, 15),
-                RecordKey.Hashi(12, 10, 15),
-            ),
-            groups.map { it.first },
-        )
     }
 }

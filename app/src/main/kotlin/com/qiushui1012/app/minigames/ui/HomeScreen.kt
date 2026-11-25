@@ -57,11 +57,15 @@ import com.qiushui1012.app.minigames.AppContainer
 import com.qiushui1012.app.minigames.GameInProgress
 import com.qiushui1012.app.minigames.R
 import com.qiushui1012.app.minigames.Space
-import com.qiushui1012.app.minigames.difficultyFromStorageName
+import com.qiushui1012.app.minigames.data.ArrowCubeRecord
 import com.qiushui1012.app.minigames.data.GameKind
-import com.qiushui1012.app.minigames.data.RecordKey
+import com.qiushui1012.app.minigames.data.HashiRecord
+import com.qiushui1012.app.minigames.data.MinesweeperRecord
+import com.qiushui1012.app.minigames.data.NonogramRecord
+import com.qiushui1012.app.minigames.data.PipesRecord
 import com.qiushui1012.app.minigames.data.SavedGame
 import com.qiushui1012.app.minigames.data.Settings
+import com.qiushui1012.app.minigames.data.SudokuRecord
 import com.qiushui1012.app.minigames.minesweeperModeFromStorageName
 import com.qiushui1012.app.minigames.rules.MinesweeperMode
 import com.qiushui1012.app.minigames.rules.PipesLayout
@@ -123,6 +127,7 @@ fun HomeScreen(
     val minesweeperSave by container.records.save(GameKind.Minesweeper).collectAsStateWithLifecycle(initialValue = null)
     val nonogramSave by container.records.save(GameKind.Nonogram).collectAsStateWithLifecycle(initialValue = null)
     val hashiSave by container.records.save(GameKind.Hashi).collectAsStateWithLifecycle(initialValue = null)
+    val arrowCubeSave by container.records.save(GameKind.ArrowCube).collectAsStateWithLifecycle(initialValue = null)
 
     // The minesweeper card's summary is read back from the parameters the settings kept, so
     // that the card and the dialog that produced it cannot describe the same game in two
@@ -153,47 +158,52 @@ fun HomeScreen(
             GameEntry(
                 kind = GameKind.Pipes,
                 name = stringResource(R.string.home_pipes_name),
-                summary = keyLabel(RecordKey.Pipes(settings.lastPipesSize, settings.lastPipesWrapped)),
+                summary = PipesRecord(settings.lastPipesSize, settings.lastPipesWrapped).keyLabel(),
                 save = pipesSave,
             ),
             GameEntry(
                 kind = GameKind.Sudoku,
                 name = stringResource(R.string.home_sudoku_name),
-                summary = keyLabel(RecordKey.Sudoku(settings.lastSudokuDifficulty)),
+                summary = SudokuRecord(settings.lastSudokuDifficulty).keyLabel(),
                 save = sudokuSave,
             ),
             GameEntry(
                 kind = GameKind.Minesweeper,
                 name = stringResource(R.string.home_minesweeper_name),
                 summary =
-                    keyLabel(
-                        RecordKey.Minesweeper(
-                            width = settings.lastMinesweeperWidth,
-                            height = settings.lastMinesweeperHeight,
-                            mines = minesweeperMines,
-                            noGuess = minesweeperModeFromStorageName(settings.lastMinesweeperMode) == MinesweeperMode.NoGuess,
-                        ),
-                    ),
+                    MinesweeperRecord(
+                        width = settings.lastMinesweeperWidth,
+                        height = settings.lastMinesweeperHeight,
+                        mines = minesweeperMines,
+                        noGuess = minesweeperModeFromStorageName(settings.lastMinesweeperMode) == MinesweeperMode.NoGuess,
+                    ).keyLabel(),
                 save = minesweeperSave,
             ),
             GameEntry(
                 kind = GameKind.Nonogram,
                 name = stringResource(R.string.home_nonogram_name),
-                summary = keyLabel(RecordKey.Nonogram(settings.lastNonogramWidth, settings.lastNonogramHeight)),
+                summary = NonogramRecord(settings.lastNonogramWidth, settings.lastNonogramHeight).keyLabel(),
                 save = nonogramSave,
             ),
             GameEntry(
                 kind = GameKind.Hashi,
                 name = stringResource(R.string.home_hashi_name),
                 summary =
-                    keyLabel(
-                        RecordKey.Hashi(
-                            width = settings.lastHashiWidth,
-                            height = settings.lastHashiHeight,
-                            islands = hashiIslands,
-                        ),
-                    ),
+                    HashiRecord(
+                        width = settings.lastHashiWidth,
+                        height = settings.lastHashiHeight,
+                        islands = hashiIslands,
+                    ).keyLabel(),
                 save = hashiSave,
+            ),
+            GameEntry(
+                kind = GameKind.ArrowCube,
+                name = stringResource(R.string.home_arrow_cube_name),
+                // The box is fixed at its default here: a game's size is chosen in the dialog
+                // and is deliberately not remembered, so a card that showed a remembered size
+                // would describe a game the dialog would not start.
+                summary = ArrowCubeRecord(10, 10, 10).keyLabel(),
+                save = arrowCubeSave,
             ),
         )
 
@@ -343,11 +353,11 @@ private fun GameEntryCard(
 /**
  * The mark of a game, drawn above its name.
  *
- * The drawing is the game's own file in `assets/`: `pipes.svg`, `sudoku.svg` and
- * `minesweeper.svg`. A mark is not the same thing as a board cell, so it is read here rather
- * than from [PipeArt], whose files are the pieces a board is made of; and it is read rather
- * than copied into code, so an edited drawing changes the card without a second record of its
- * geometry.
+ * The drawing is the game's own file in `assets/`: `pipes.svg`, `sudoku.svg`,
+ * `minesweeper.svg`, `nonogram.svg`, `hashi.svg` and `arrowcube.svg`. A mark is not the same
+ * thing as a board cell, so it is read here rather than from [PipeArt], whose files are the
+ * pieces a board is made of; and it is read rather than copied into code, so an edited drawing
+ * changes the card without a second record of its geometry.
  *
  * Each band is drawn in the tone its file gives it, resolved against the theme: the ink is the
  * theme's foreground, the surface is the card's own colour, the alert is the red a board uses
@@ -435,6 +445,11 @@ fun restoreGame(save: SavedGame): GameInProgress? =
         GameKind.Hashi ->
             Rules.hashiFromSnapshot(save.snapshot)?.let { board ->
                 GameInProgress.Hashi(board, save.playerName, save.seconds)
+            }
+
+        GameKind.ArrowCube ->
+            Rules.arrowCubeFromSnapshot(save.snapshot)?.let { board ->
+                GameInProgress.ArrowCube(board, save.playerName, save.seconds)
             }
     }
 

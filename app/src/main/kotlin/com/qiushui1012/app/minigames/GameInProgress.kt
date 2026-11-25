@@ -14,8 +14,15 @@
 
 package com.qiushui1012.app.minigames
 
+import com.qiushui1012.app.minigames.data.ArrowCubeRecord
 import com.qiushui1012.app.minigames.data.GameKind
-import com.qiushui1012.app.minigames.data.RecordKey
+import com.qiushui1012.app.minigames.data.GameRecord
+import com.qiushui1012.app.minigames.data.HashiRecord
+import com.qiushui1012.app.minigames.data.MinesweeperRecord
+import com.qiushui1012.app.minigames.data.NonogramRecord
+import com.qiushui1012.app.minigames.data.PipesRecord
+import com.qiushui1012.app.minigames.data.SudokuRecord
+import com.qiushui1012.app.minigames.rules.ArrowCubeBoard
 import com.qiushui1012.app.minigames.rules.HashiBoard
 import com.qiushui1012.app.minigames.rules.MinesweeperBoard
 import com.qiushui1012.app.minigames.rules.MinesweeperMode
@@ -36,8 +43,14 @@ import com.qiushui1012.app.minigames.rules.SudokuDifficulty
  * continues from where it stopped.
  */
 sealed interface GameInProgress {
-    /** The parameters the game is played with, which is also what its record is filed under. */
-    val key: RecordKey
+    /**
+     * The parameters the game is played with, as a record group without plays.
+     *
+     * The same value is what [com.qiushui1012.app.minigames.data.GameRecord.groupKey] merges
+     * on, so the group a finished game joins is built from the board rather than guessed from
+     * a separate key type.
+     */
+    val key: GameRecord
 
     /** The name the player is playing under, or empty when none was given. */
     val playerName: String
@@ -67,7 +80,7 @@ sealed interface GameInProgress {
     ) : GameInProgress {
         override val kind: GameKind = GameKind.Pipes
 
-        override val key: RecordKey = RecordKey.Pipes(board.size, board.layout == PipesLayout.Wrapped)
+        override val key: GameRecord = PipesRecord(board.size, board.layout == PipesLayout.Wrapped)
 
         override val seed: Long get() = board.seed
     }
@@ -82,7 +95,7 @@ sealed interface GameInProgress {
     ) : GameInProgress {
         override val kind: GameKind = GameKind.Sudoku
 
-        override val key: RecordKey = RecordKey.Sudoku(board.difficulty.toStorageName())
+        override val key: GameRecord = SudokuRecord(board.difficulty.toStorageName())
 
         override val seed: Long get() = board.seed
     }
@@ -105,9 +118,9 @@ sealed interface GameInProgress {
         // The key is read from the board rather than captured: whether a game fell back is only
         // known after its first click, and a key built before that would file every game as
         // the rules the player asked for rather than the board they played.
-        override val key: RecordKey
+        override val key: GameRecord
             get() =
-                RecordKey.Minesweeper(
+                MinesweeperRecord(
                     width = board.width,
                     height = board.height,
                     mines = board.mineCount,
@@ -135,7 +148,7 @@ sealed interface GameInProgress {
     ) : GameInProgress {
         override val kind: GameKind = GameKind.Nonogram
 
-        override val key: RecordKey = RecordKey.Nonogram(board.width, board.height)
+        override val key: GameRecord = NonogramRecord(board.width, board.height)
 
         override val seed: Long get() = board.seed
     }
@@ -150,8 +163,22 @@ sealed interface GameInProgress {
     ) : GameInProgress {
         override val kind: GameKind = GameKind.Hashi
 
-        override val key: RecordKey =
-            RecordKey.Hashi(board.width, board.height, board.islandCount)
+        override val key: GameRecord = HashiRecord(board.width, board.height, board.islandCount)
+
+        override val seed: Long get() = board.seed
+    }
+
+    /** An arrow cube game. */
+    data class ArrowCube(
+        /** The board. */
+        val board: ArrowCubeBoard,
+        override val playerName: String,
+        override val elapsedSeconds: Long,
+        override val typedSeed: Boolean = false,
+    ) : GameInProgress {
+        override val kind: GameKind = GameKind.ArrowCube
+
+        override val key: GameRecord = ArrowCubeRecord(board.width, board.depth, board.height)
 
         override val seed: Long get() = board.seed
     }
