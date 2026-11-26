@@ -255,7 +255,15 @@ class ArrowCubeSceneTest {
             1e-4f,
         )
         assertEquals(0.8f, tipOne - one.minOf { it.first }, 1e-4f)
-        assertEquals(1.6f, tipTwo - two.minOf { it.first }, 1e-4f)
+        assertEquals(1.44f, tipTwo - two.minOf { it.first }, 1e-4f)
+        assertTrue(
+            "a one-cell arrow stays inside its face",
+            one.all { abs(it.first) <= 0.5f + 1e-4f && abs(it.second) <= 0.5f + 1e-4f },
+        )
+        assertTrue(
+            "a two-cell arrow stays inside its face",
+            two.all { abs(it.first) <= 1f + 1e-4f && abs(it.second) <= 0.5f + 1e-4f },
+        )
     }
 
     @Test

@@ -276,19 +276,22 @@ object ArrowCubeScene {
         val decal = face.decal ?: return emptyList()
         val centre = face.corners.reduce(Vec3::plus) * 0.25f
         val along = directionVector(decal.direction)
-        val extension = ARROW_HALF_LENGTH * (decal.length - 1)
         return arrowOutline(decal.length).map { (u, v) ->
-            centre + along * (u + extension) + decal.across * v
+            centre + along * u + decal.across * v
         }
     }
 
     /** Returns the points of the arrow outline for a face that is [cells] cells long. */
     private fun arrowOutline(cells: Int): List<Pair<Float, Float>> {
-        val extension = ARROW_HALF_LENGTH * (cells - 1)
+        // A one-cell face keeps the icon's full reach. A longer face keeps the head as it is
+        // and moves both ends outwards a little less than a whole cell, so the arrow keeps a
+        // margin at the ends of the face instead of touching its neighbours.
+        val reach = if (cells == 1) ARROW_TIP else ARROW_LONG_REACH_PER_CELL * cells
+        val extension = reach - ARROW_TIP
         return ARROW_ICON.mapIndexed { index, (u, v) ->
             val tail = index == ARROW_TAIL_UPPER || index == ARROW_TAIL_LOWER
             if (tail) {
-                -ARROW_HALF_LENGTH * cells to v
+                -reach to v
             } else {
                 u + extension to v
             }
@@ -463,7 +466,10 @@ private val ARROW_ICON =
     )
 
 /** The distance from the centre to the tip of a one-cell arrow. */
-private const val ARROW_HALF_LENGTH = 0.4f
+private const val ARROW_TIP = 0.4f
+
+/** The reach of one cell of a long face, which leaves a margin at both ends. */
+private const val ARROW_LONG_REACH_PER_CELL = 0.36f
 
 /** The index of the first tail corner, which a longer face moves backwards. */
 private const val ARROW_TAIL_UPPER = 5

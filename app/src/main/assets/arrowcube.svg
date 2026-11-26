@@ -1,19 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- The cube follows Google's Material Icons deployed_code mark, and the arrows reuse the
-     arrow_left_alt mark; Material Icons is Copyright Google LLC, Apache License 2.0. -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 72 72">
   <defs>
     <style>
-      .cls-1{fill:#ffffff;stroke:#000000;stroke-width:2;stroke-miterlimit:10}
-      .cls-2{fill:#de3a54}
+      .cls-1{fill:#000000;stroke:#000000;stroke-miterlimit:10}
+      .cls-2{fill:#000000}
     </style>
   </defs>
-  <title>Arrow Cube</title>
+  <title>arrowcube.svg</title>
   <g id="Layer_1" data-name="Layer 1">
-    <path d="M36 12 L60 24 L36 36 L12 24 Z" class="cls-1"/>
-    <path d="M12 24 L36 36 L36 60 L12 48 Z" class="cls-1"/>
-    <path d="M36 36 L60 24 L60 48 L36 60 Z" class="cls-1"/>
-    <path d="M44.64 21.82 L44.64 28.32 L31.65 28.32 L31.62 27.17 L40.73 27.17 L26.55 20.08 L28.17 19.28 L42.35 26.37 L42.35 21.81 Z" class="cls-2"/>
-    <path d="M25.91 43.73 L31.68 40.84 L25.91 32.18 L24.87 32.67 L28.92 38.74 L16.32 32.44 L16.32 33.88 L28.92 40.18 L24.87 42.21 Z" class="cls-2"/>
+    <path d="M45.003 18.331 L45.003 24.831 L32.013 24.831 L31.983 23.681 L41.093 23.681 L26.913 16.591 L28.298 15.752 L42.713 22.881 L42.713 18.321 Z" class="cls-1"/>
+    <path d="M24.015 51.147 L30.129 48.696 L24.121 39.446 L23.08 39.848 L27.295 46.386 L14.317 38.854 L14.295 40.309 L27.378 47.872 L23.042 49.489 Z" class="cls-1"/>
+    <path d="M33.5 63.166 L33.5 37.417 L11 24.417 L11 50.166 Z M38.5 63.166 L61 50.166 L61 24.333 L38.5 37.4 Z M36 33.167 L58.166 20.25 L36 7.417 L13.75 20.25 Z M8.5 54.5 C7.711 54.033 7.095 53.416 6.65 52.65 C6.206 51.883 5.989 51.055 6 50.166 L6 21.834 C6 20.945 6.217 20.117 6.65 19.35 C7.084 18.584 7.7 17.967 8.5 17.5 L33.5 3.084 C34.3 2.639 35.139 2.417 36.017 2.417 C36.894 2.417 37.722 2.639 38.5 3.084 L63.5 17.5 C64.289 17.967 64.905 18.584 65.35 19.35 C65.794 20.117 66.011 20.945 66 21.834 L66 50.166 C66 51.055 65.783 51.883 65.35 52.65 C64.916 53.416 64.3 54.033 63.5 54.5 L38.5 68.916 C37.7 69.361 36.861 69.583 35.983 69.583 C35.106 69.583 34.278 69.361 33.5 68.916 Z M36 36 Z" class="cls-2"/>
   </g>
 </svg>

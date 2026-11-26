@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
@@ -67,6 +68,15 @@ private const val BUMP_BACK_MILLIS = 75f
 
 /** How wide the shadow band of the three-dimensional board is, in dp. */
 private const val ARROW_SHADOW_DP = 20f
+
+/** How thick a face outline is, as a fraction of one projected cell. */
+private const val OUTLINE_PER_CELL = 0.025f
+
+/** The smallest outline that still reads as a line, in pixels. */
+private const val OUTLINE_MIN_PX = 0.6f
+
+/** The largest outline, in dp, so a zoomed face does not turn into a frame. */
+private const val OUTLINE_MAX_DP = 1.2f
 
 /** How long one red flash lasts, in milliseconds. */
 private const val FLASH_PERIOD_MILLIS = 500f
@@ -387,6 +397,7 @@ fun ArrowCubePlay(
         }
         val current = camera ?: return@Canvas
         drawRect(background)
+        val outlineWidth = (current.scale * OUTLINE_PER_CELL).coerceIn(OUTLINE_MIN_PX, OUTLINE_MAX_DP * density)
 
         val active = motion
         val offset = offsetOf(active, elapsed, flyDistance)
@@ -428,7 +439,9 @@ fun ArrowCubePlay(
                     val arrow =
                         ArrowCubeScene.decalPoints(projected.face).map(current::project).toPath()
                     if (arrow != null) {
-                        drawPath(arrow, color = arrowColor, style = Fill)
+                        // An arrow belongs to its face; clipping is the last guarantee that a
+                        // rounding error at a long face's end cannot paint on a neighbour.
+                        clipPath(path) { drawPath(arrow, color = arrowColor, style = Fill) }
                     }
                 }
                 if (flash > 0f) {
@@ -437,7 +450,7 @@ fun ArrowCubePlay(
                 drawPath(
                     path,
                     color = outline,
-                    style = Stroke(width = 1.dp.toPx(), join = StrokeJoin.Miter),
+                    style = Stroke(width = outlineWidth, join = StrokeJoin.Miter),
                 )
             }
         }
