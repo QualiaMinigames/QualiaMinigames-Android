@@ -58,6 +58,7 @@ import com.qiushui1012.app.minigames.rules.ArrowCubeBoard
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sin
 
 /** The flight duration the fade threshold refers to; twice this is when the fallback starts. */
@@ -131,13 +132,20 @@ private sealed interface Motion {
         val gap: Int,
         /** How long the constant-speed approach takes, in milliseconds. */
         val travelMillis: Float,
+        /** How long the constant-speed return takes before its easing tail, in milliseconds. */
+        val returnTravelMillis: Float,
+        /** How far the return easing tail covers, in cells. */
+        val returnEaseDistance: Float,
         /** All six faces of the blocked block. */
         override val faces: List<ArrowCubeFace>,
         /** The faces the slot left by the block uncovers while it is away. */
         val cavity: List<ArrowCubeFace>,
     ) : Motion {
         override val durationMillis: Float =
-            max(travelMillis + BUMP_CONTACT_MILLIS + BUMP_BACK_MILLIS, FLASH_PERIOD_MILLIS * FLASH_CYCLES)
+            max(
+                travelMillis + BUMP_CONTACT_MILLIS + returnTravelMillis + BUMP_BACK_MILLIS,
+                FLASH_PERIOD_MILLIS * FLASH_CYCLES,
+            )
     }
 }
 
@@ -350,22 +358,33 @@ fun ArrowCubePlay(
             val bump = animation.motion
             bump is Motion.Bumping && bump.block.index == blocks[index].index
         }
+        val gap = result.gap
+        val distance = if (gap > 0) gap - 1f / 64f else 0f
+        val travel = if (gap > 0) gap * 1000f / bumpSpeed else 0f
+        val speed = if (travel > 0f) distance / travel else 0f
+        // A cubic ease-out starts at three times its average speed. Giving the tail
+        // `speed * duration / 3` of distance lets the constant return flow into it without
+        // a velocity jump; the tail then uses its old 75 ms duration.
+        val returnEaseDistance = if (speed > 0f) min(distance, speed * BUMP_BACK_MILLIS / 3f) else 0f
+        val returnTravel = if (speed > 0f) (distance - returnEaseDistance) / speed else 0f
         animations.add(
             ActiveAnimation(
                 Motion.Bumping(
                     block = blocks[index],
                     blocker = blocks[blockerIndex],
-                    gap = result.gap,
+                    gap = gap,
                     // The constant part ends at the blocker; the contact phase keeps the old
-                    // outbound duration and the return keeps its own, so the total matches.
-                    travelMillis = if (result.gap > 0) result.gap * 1000f / bumpSpeed else 0f,
+                    // outbound duration, and the return has its own constant part before easing.
+                    travelMillis = travel,
+                    returnTravelMillis = returnTravel,
+                    returnEaseDistance = returnEaseDistance,
                     // A moving block turns, because the camera may keep turning while it moves.
                     // All six faces are kept here so the back-face pass can choose the visible
                     // ones every frame; keeping only the exposed ones would let the player see
                     // through the block once it leaves the neighbours that hid its sides.
                     faces = ArrowCubeScene.blockFaces(blocks[index]),
                     cavity =
-                        if (result.gap > 0) {
+                        if (gap > 0) {
                             ArrowCubeScene.cavityFaces(boardSize, blocks[index], blocks, occupancy)
                         } else {
                             emptyList()
@@ -631,9 +650,17 @@ private fun offsetOf(
                     }
 
                     else -> {
-                        val back =
-                            ((elapsed - travel - BUMP_CONTACT_MILLIS) / BUMP_BACK_MILLIS).coerceIn(0f, 1f)
-                        directionVector(motion.block.direction) * (distance * (1f - easeOutCubic(back)))
+                        val back = elapsed - travel - BUMP_CONTACT_MILLIS
+                        val remaining =
+                            if (back <= motion.returnTravelMillis) {
+                                val constant = (back / motion.returnTravelMillis).coerceIn(0f, 1f)
+                                distance - (distance - motion.returnEaseDistance) * constant
+                            } else {
+                                val eased =
+                                    ((back - motion.returnTravelMillis) / BUMP_BACK_MILLIS).coerceIn(0f, 1f)
+                                motion.returnEaseDistance * (1f - easeOutCubic(eased))
+                            }
+                        directionVector(motion.block.direction) * remaining
                     }
                 }
             }

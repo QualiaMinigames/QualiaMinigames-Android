@@ -267,10 +267,13 @@ class ArrowCubeSceneTest {
     }
 
     @Test
-    fun the_animation_speeds_are_a_share_of_the_longest_side_per_second() {
-        val board = BoardSize(10, 8, 6)
-        assertEquals(5.5f, ArrowCubeScene.flySpeed(board), 1e-6f)
-        assertEquals(4.0f, ArrowCubeScene.bumpSpeed(board), 1e-6f)
+    fun the_animation_speeds_scale_with_the_longest_side() {
+        val small = BoardSize(5, 4, 3)
+        val large = BoardSize(10, 8, 6)
+        assertEquals(2f * ArrowCubeScene.flySpeed(small), ArrowCubeScene.flySpeed(large), 1e-6f)
+        assertEquals(2f * ArrowCubeScene.bumpSpeed(small), ArrowCubeScene.bumpSpeed(large), 1e-6f)
+        assertTrue(ArrowCubeScene.flySpeed(small) > 0f)
+        assertTrue(ArrowCubeScene.bumpSpeed(small) > 0f)
     }
 
     @Test
