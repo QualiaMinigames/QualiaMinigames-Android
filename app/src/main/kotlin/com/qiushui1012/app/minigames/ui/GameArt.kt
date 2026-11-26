@@ -107,9 +107,9 @@ object GameArt {
     /**
      * Reads one file into bands.
      *
-     * Each file declares its colours in a `<style>` block keyed by class, so the classes are
-     * resolved first and a path takes the fill and the outline its class gives it. A path the
-     * file fills white is painted with the surface colour, which is what makes the gap in a
+     * Each file declares its colours either in a `<style>` block keyed by class or directly on
+     * the path. A class is resolved first; an attribute of the same name overrides it. A path
+     * the file fills white is painted with the surface colour, which is what makes the gap in a
      * mark a gap rather than a second tone.
      */
     private fun parse(
@@ -121,10 +121,26 @@ object GameArt {
         return PathElement.findAll(text).mapNotNull { element ->
             val attributes = element.value
             val data = PathData.find(attributes)?.groupValues?.get(1) ?: return@mapNotNull null
-            val style = ClassName.find(attributes)?.groupValues?.get(1)?.let { styles[it] } ?: Style()
+            val style = styleOf(attributes, styles)
             val parsed = PathParser.createPathFromPathData(data)?.asComposePath() ?: return@mapNotNull null
             Band(parsed, style.fill, style.stroke, style.strokeWidth)
         }.toList()
+    }
+
+    /** Reads a path's paint from its class and from the attributes written on the element. */
+    private fun styleOf(
+        attributes: String,
+        styles: Map<String, Style>,
+    ): Style {
+        val classStyle = ClassName.find(attributes)?.groupValues?.get(1)?.let(styles::get)
+        val fill = FillAttribute.find(attributes)?.groupValues?.get(1)?.trim()?.takeUnless(::isNone)?.let(::toneOf)
+        val stroke = StrokeAttribute.find(attributes)?.groupValues?.get(1)?.trim()?.takeUnless(::isNone)?.let(::toneOf)
+        val width = StrokeWidthAttribute.find(attributes)?.groupValues?.get(1)?.toFloatOrNull()
+        return Style(
+            fill = fill ?: classStyle?.fill,
+            stroke = stroke ?: classStyle?.stroke,
+            strokeWidth = width ?: classStyle?.strokeWidth ?: 0f,
+        )
     }
 
     /** What a class paints: a fill, an outline, or both. */
@@ -205,4 +221,13 @@ object GameArt {
 
     /** Matches the class of a path element. */
     private val ClassName = Regex("""class="([\w-]+)"""")
+
+    /** Matches a fill written directly on a path element. */
+    private val FillAttribute = Regex("""\bfill="([^"]+)"""")
+
+    /** Matches an outline written directly on a path element. */
+    private val StrokeAttribute = Regex("""\bstroke="([^"]+)"""")
+
+    /** Matches a width written directly on a path element. */
+    private val StrokeWidthAttribute = Regex("""\bstroke-width="([^"]+)"""")
 }
