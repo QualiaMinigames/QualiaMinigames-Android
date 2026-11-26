@@ -45,11 +45,11 @@ plugins {
 // The published FFI this build asks for, and the digest the registry publishes for it. The
 // digest is checked once the archive is on disk: a build that fetched a substituted or
 // truncated file would otherwise compile something nobody reviewed.
-val ffiCrateVersion = providers.gradleProperty("qualia.minigames.ffi.version").getOrElse("0.3.0")
+val ffiCrateVersion = providers.gradleProperty("qualia.minigames.ffi.version").getOrElse("0.4.0")
 val ffiCrateSha256 =
     providers
         .gradleProperty("qualia.minigames.ffi.sha256")
-        .getOrElse("59c96f46856c3a6660edaaa30af26cbd701e8006f38795be2405598039f7a8a5")
+        .getOrElse("49dd3d9484c7fea21f0233f11da2e4bd4e1fafb89b5a567306ec3e6432efd53e")
 val ffiLocalDir = providers.gradleProperty("qualia.minigames.ffi.localDir").orNull
 val rustSourceDir = ffiLocalDir?.let { rootProject.file(it) } ?: layout.projectDirectory.dir("rust").asFile
 val rustManifest = rustSourceDir.resolve("Cargo.toml")
