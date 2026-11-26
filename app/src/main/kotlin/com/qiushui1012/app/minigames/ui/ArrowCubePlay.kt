@@ -58,7 +58,7 @@ import kotlin.math.max
 import kotlin.math.sin
 
 /** How long a taken block flies out, in milliseconds. */
-private const val FLY_MILLIS = 780f
+private const val FLY_MILLIS = 1500f
 
 /** How long a blocked block travels towards its blocker, in milliseconds. */
 private const val BUMP_OUT_MILLIS = 50f
@@ -291,7 +291,7 @@ fun ArrowCubePlay(
 
     /** Turns the camera by a drag, in dp, and keeps it outside the box. */
     fun rotateBy(dx: Float, dy: Float) {
-        yaw = wrapDegrees(yaw + dx * ROTATE_PER_DP)
+        yaw = wrapDegrees(yaw - dx * ROTATE_PER_DP)
         pitch = clampPitch(pitch + dy * ROTATE_PER_DP)
         val minimum = minDistance(boardSize, yaw, pitch)
         distance = distance.coerceIn(minimum.coerceAtMost(fitDistance), fitDistance)
