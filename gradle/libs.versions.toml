@@ -21,8 +21,8 @@
 # versions move together.
 
 [versions]
-kotlin = "2.1.21"
-androidGradlePlugin = "8.7.3"
+kotlin = "2.2.10"
+androidGradlePlugin = "9.5.0"
 composeBom = "2025.04.01"
 androidxActivity = "1.9.3"
 androidxLifecycle = "2.8.5"
