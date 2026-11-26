@@ -26,7 +26,7 @@
 | 项 | 值 |
 |---|---|
 | applicationId | `com.qiushui1012.app.minigames` |
-| 版本 | `0.4.0`（versionCode 6） |
+| 版本 | `0.4.1`（versionCode 7） |
 | minSdk | 26 |
 | targetSdk | 36 |
 | compileSdk | 35 |

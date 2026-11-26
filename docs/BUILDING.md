@@ -78,6 +78,9 @@ git tag -a v0.4.0 -m "QualiaMinigames-Android 0.4.0"
 git push origin v0.4.0
 ```
 
+上面的版本号只是 0.4.0 的示例。只改应用、Core 与 FFI 未变时不需要重发前两个仓库，执行第 3
+步并把标签换成应用的 `versionName` 即可；例如 0.4.1 仍依赖 FFI 0.4.0。
+
 本仓库的 CI 默认从 crates.io 取 `qualia-minigames-ffi`，与发布构建看到的是同一份来源。
 要验证尚未发布的 FFI，用 `-Pqualia.minigames.ffi.localDir=../FFI` 指向本地检出。
 

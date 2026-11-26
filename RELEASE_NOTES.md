@@ -1,9 +1,9 @@
 # QualiaMinigames @VERSION@
 
-接水管、数独、扫雷、数织与数桥五个小游戏的 Android 前端，规则由同一套 Rust 核心库提供。
+接水管、数独、扫雷、数织、数桥与箭立方六个小游戏的 Android 前端，规则由同一套 Rust 核心库提供。
 
-The Android front end for pipes, sudoku, minesweeper, nonogram and hashi; the rules come from
-one Rust core library.
+The Android front end for pipes, sudoku, minesweeper, nonogram, hashi and arrow cube; the rules
+come from one Rust core library.
 
 ## 下载 / Download
 
@@ -16,34 +16,29 @@ one Rust core library.
 
 ## 本次内容 / What is in it
 
-- 新增箭立方：宽、深、高各自 5~30 的实心长方体，由 1×1×1 与 1×2×1 两种方块铺满；每块带一个
-  六向箭头，从箭头一端沿方向到边界之间全空时才能取出。生成器先随机铺满，再从满盘随机剥离，
-  剥离时给每块选一个当时合法的箭头，因此盘面一定可解。点错次数、暂停保存与恢复、完成判定
-  都在规则库中实现；本玩法没有撤销。
-  Arrow Cube: a solid box 5 to 30 cells on each side, filled with 1×1×1 and 1×2×1 blocks. Every
-  block carries one of six arrows and leaves along it when the cells from its front to the edge
-  are empty. The generator fills the box at random, peels it apart, and gives each block an
-  arrow that is legal at the moment it is peeled, so every board is solvable. Mistakes, pause
-  and resume, and the solved check live in the rules library; the game has no undo.
-- 对局页用正交投影的 Compose Canvas 自绘三维场景，单指旋转、双指以棋盘左上与右下角点为锚点
-  缩放；只生成外露面，再依次做背面剔除、视口剔除与画家算法排序，放大到模型被视口裁掉时
-  沿该方向显示阴影带。
-  The play screen draws the scene on a Compose Canvas with an orthographic projection: one
-  finger rotates, two fingers zoom about the board's top-left and bottom-right corners. Only
-  exposed faces are generated, then back-face culled, viewport culled and painter-sorted; a
-  zoomed model that leaves the view gains a shadow band on that side.
-- 记录模型改为按玩法分型的 typed record：每个玩法一个记录组，保存自己的参数、最佳时长与历史
-  对局；箭立方另存最佳点错次数。JSON 的 `type` 字段分派到各游戏的 codec。旧版本的 `records`
-  数组在读取时迁移到新的 `groups` 数组，下一次写入保存为新格式，旧记录不丢失。
-  Records are typed per game: each game has a record group with its own parameters, best time
-  and history; arrow cube also keeps the mistakes of its best play. The JSON `type` field
-  dispatches to the game's codec. An old `records` array is migrated into the new `groups`
-  array when read, and the next write stores the new shape, so old records are not lost.
-- 主页新增箭立方卡片与等轴测立方体图标；六张卡片、记录页、详情与导出图都显示参数、最佳成绩
-  与点错次数。其余五款玩法的规则与操作保持不变。
-  The home page gains an Arrow Cube card and an isometric cube mark; six cards, the records
-  page, the detail dialog and the exported image show parameters, best scores and mistakes.
-  The other five games keep their rules and controls.
+0.4.1 是箭立方的修复版本，其余五款玩法保持不变。
+0.4.1 is a patch for Arrow Cube; the other five games are unchanged.
+
+- 取出的方块改为恒速直线飞出，完全离开渲染区域后才消失；若超过原时长两倍仍未离开，则在
+  500ms 内渐隐。极端视角下不会再看到方块停在屏幕里。
+  Taken blocks now leave in a straight line at constant speed and disappear only after they
+  are entirely outside the render area. If one is still visible after twice the old duration,
+  it fades over 500 ms instead of stopping on screen.
+- 失败撞击先按恒速接近，接触后按恒速返回，并在返回末段缓出；恒速与缓出的衔接处速度连续。
+  A blocked block approaches at constant speed, holds briefly at the contact, then returns at
+  constant speed and eases into its cell without a velocity jump at the seam.
+- 点击不再被整段动画拦截：成功取出 75ms 后即可继续操作，失败动画只拦截落在该动画路径上的
+  失败点击。多个飞出与撞击动画可以同时播放。
+  Taps are no longer blocked for a whole animation: a successful take releases input after
+  75 ms, and a failed take only ignores further failed taps on that animation's path. Several
+  flights and bumps can run at once.
+- 修复箭立方的面绘制：2 宽方块在洞口和视口左右边缘不再被错误遮盖或剔除，长面按面中心深度
+  排序，外露判断改为逐格扫描。
+  Fixes Arrow Cube face drawing: two-cell faces at holes and view edges are no longer painted
+  over or culled, long faces sort by their centre depth, and exposure is scanned per cell.
+- 修正旋转方向相反的问题。
+  Fixes the reversed drag-rotation direction.
+
 ## 校验 / Verification
 
 签名证书 `CN=QualiaMinigames`，SHA-256 指纹：
