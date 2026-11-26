@@ -267,6 +267,265 @@ class ArrowCubeSceneTest {
     }
 
     @Test
+    fun the_blocker_read_agrees_with_the_game_take() {
+        val board = BoardSize(5, 5, 5)
+        val rules = requireNotNull(com.qiushui1012.app.minigames.rules.Rules.newArrowCube(5, 5, 5, 11))
+        val blocks = rules.blocks()
+        val occupancy = ArrowCubeScene.occupancyOf(board, blocks)
+        for (index in blocks.indices) {
+            val fresh = requireNotNull(com.qiushui1012.app.minigames.rules.Rules.newArrowCube(5, 5, 5, 11))
+            val freshBlocks = fresh.blocks()
+            val taken = fresh.take(index)
+            val read = ArrowCubeScene.blocker(board, freshBlocks[index], occupancy)
+            assertEquals(
+                "block $index",
+                taken.blocker,
+                read,
+            )
+        }
+    }
+
+    @Test
+    fun the_blocker_read_follows_the_arrow_from_the_front_cell() {
+        val board = BoardSize(5, 5, 5)
+        val east = single(board, 0, 2, 2, 2, ArrowCubeDirection.East)
+        val farEast = single(board, 1, 4, 2, 2, ArrowCubeDirection.East)
+        val west = single(board, 0, 3, 2, 2, ArrowCubeDirection.West)
+        val farWest = single(board, 1, 1, 2, 2, ArrowCubeDirection.West)
+        val longEast =
+            ArrowCubeBlock(
+                index = 0,
+                x = 1,
+                y = 2,
+                z = 2,
+                axis = ArrowCubeAxis.X,
+                length = 2,
+                direction = ArrowCubeDirection.East,
+                removed = false,
+            )
+        val longBlocker = single(board, 1, 4, 2, 2, ArrowCubeDirection.East)
+
+        val eastOccupancy = ArrowCubeScene.occupancyOf(board, listOf(east, farEast))
+        assertEquals(farEast.index, ArrowCubeScene.blocker(board, east, eastOccupancy))
+        val westOccupancy = ArrowCubeScene.occupancyOf(board, listOf(west, farWest))
+        assertEquals(farWest.index, ArrowCubeScene.blocker(board, west, westOccupancy))
+        val longOccupancy = ArrowCubeScene.occupancyOf(board, listOf(longEast, longBlocker))
+        assertEquals(longBlocker.index, ArrowCubeScene.blocker(board, longEast, longOccupancy))
+        assertEquals(null, ArrowCubeScene.blocker(board, east, ArrowCubeScene.occupancyOf(board, listOf(east))))
+
+        // A one-cell block may point along an axis other than its arbitrary stored axis: the
+        // read has to follow the arrow, not that field.
+        val north = single(board, 0, 2, 2, 2, ArrowCubeDirection.North)
+        val farNorth = single(board, 1, 2, 4, 2, ArrowCubeDirection.North)
+        assertEquals(
+            farNorth.index,
+            ArrowCubeScene.blocker(board, north, ArrowCubeScene.occupancyOf(board, listOf(north, farNorth))),
+        )
+    }
+
+    @Test
+    fun a_face_that_crosses_the_view_is_never_culled_by_the_viewport() {
+        // Zooming in makes faces larger than the screen: a front-facing face that covers a
+        // screen corner, or has a corner on screen, is visible and must survive the viewport
+        // pass even though all four of its own corners may lie outside the screen.
+        val board = BoardSize(10, 10, 10)
+        val blocks =
+            (0 until board.width * board.depth * board.height).map { cell ->
+                val x = cell % board.width
+                val y = (cell / board.width) % board.depth
+                val z = cell / (board.width * board.depth)
+                single(board, cell, x, y, z)
+            }
+        val all = faces(board, blocks)
+        val camera = OrbitCamera(board, Viewport(1220f, 2350f), 35f, 30f, 1f)
+        val visible = ArrowCubeScene.visibleFaces(all, camera).map { it.face.block to it.face.normal }.toSet()
+        val viewportCorners =
+            listOf(
+                ScreenPoint(0f, 0f),
+                ScreenPoint(1220f, 0f),
+                ScreenPoint(1220f, 2350f),
+                ScreenPoint(0f, 2350f),
+            )
+
+        fun insideQuad(
+            point: ScreenPoint,
+            quad: List<ScreenPoint>,
+        ): Boolean {
+            var sign = 0
+            for (index in quad.indices) {
+                val a = quad[index]
+                val b = quad[(index + 1) % quad.size]
+                val cross = (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x)
+                if (abs(cross) < 1e-4f) {
+                    continue
+                }
+                val current = if (cross > 0f) 1 else -1
+                if (sign == 0) {
+                    sign = current
+                } else if (sign != current) {
+                    return false
+                }
+            }
+            return true
+        }
+
+        for (face in all.filter { it.normal.dot(camera.basis.forward) < 0f }) {
+            val corners = face.corners.map(camera::project)
+            val hasCornerOnScreen =
+                corners.any { it.x in 0f..1220f && it.y in 0f..2350f }
+            val coversScreenCorner = viewportCorners.any { insideQuad(it, corners) }
+            if (hasCornerOnScreen || coversScreenCorner) {
+                assertTrue(
+                    "block ${face.block} lost a face that crosses the view",
+                    (face.block to face.normal) in visible,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun the_face_list_matches_an_independent_cell_scan() {
+        // The exposed set is defined by the cells, not by the block-level shortcut: a side of
+        // a cell that looks at nothing is exposed, and a side that looks at another block is
+        // not. This checks the shortcut against that definition over several random positions.
+        val board = BoardSize(5, 5, 5)
+        val normals =
+            listOf(
+                Vec3(1f, 0f, 0f),
+                Vec3(-1f, 0f, 0f),
+                Vec3(0f, 1f, 0f),
+                Vec3(0f, -1f, 0f),
+                Vec3(0f, 0f, 1f),
+                Vec3(0f, 0f, -1f),
+            )
+        for (seed in 0L until 8L) {
+            val game = requireNotNull(com.qiushui1012.app.minigames.rules.Rules.newArrowCube(5, 5, 5, seed))
+            val blocks = game.blocks()
+            val occupancy = ArrowCubeScene.occupancyOf(board, blocks)
+            val expected = mutableSetOf<Pair<Int, Vec3>>()
+            for (z in 0 until board.height) {
+                for (y in 0 until board.depth) {
+                    for (x in 0 until board.width) {
+                        val cell = x + board.width * (y + board.depth * z)
+                        val occupant = occupancy[cell]
+                        if (occupant < 0) {
+                            continue
+                        }
+                        for (normal in normals) {
+                            val nx = x + normal.x.toInt()
+                            val ny = y + normal.y.toInt()
+                            val nz = z + normal.z.toInt()
+                            val outside =
+                                nx !in 0 until board.width ||
+                                    ny !in 0 until board.depth ||
+                                    nz !in 0 until board.height
+                            val neighbour = if (outside) -1 else occupancy[nx + board.width * (ny + board.depth * nz)]
+                            if (outside || neighbour < 0) {
+                                expected.add(occupant to normal)
+                            }
+                        }
+                    }
+                }
+            }
+            val actual =
+                ArrowCubeScene
+                    .buildFaces(board, blocks, occupancy)
+                    .map { it.block to it.normal }
+                    .toSet()
+            assertEquals("seed $seed", expected, actual)
+        }
+    }
+
+    @Test
+    fun a_long_face_is_exposed_when_only_one_of_its_cells_is_uncovered() {
+        val board = BoardSize(5, 5, 5)
+        val long =
+            ArrowCubeBlock(
+                index = 0,
+                x = 1,
+                y = 1,
+                z = 1,
+                axis = ArrowCubeAxis.X,
+                length = 2,
+                direction = ArrowCubeDirection.East,
+                removed = false,
+            )
+        val aboveSecond = single(board, 1, 2, 1, 2)
+        val occupancy = ArrowCubeScene.occupancyOf(board, listOf(long, aboveSecond))
+        val faces = ArrowCubeScene.buildFaces(board, listOf(long, aboveSecond), occupancy)
+        assertTrue(
+            "the long top face is exposed through its first cell",
+            faces.any { it.block == long.index && it.normal == Vec3(0f, 0f, 1f) },
+        )
+    }
+
+    @Test
+    fun every_exposed_cell_boundary_has_a_face_after_a_take() {
+        // The face list is rebuilt from occupancy after a take. Every side of every remaining
+        // cell that looks at an empty cell or out of the board has to be in that list, including
+        // the side of a two-cell block that is only exposed through one of its cells.
+        val board = BoardSize(5, 5, 5)
+        val game = requireNotNull(com.qiushui1012.app.minigames.rules.Rules.newArrowCube(5, 5, 5, 7))
+        var blocks = game.blocks()
+        val occupancy = ArrowCubeScene.occupancyOf(board, blocks)
+        val normals =
+            listOf(
+                Vec3(1f, 0f, 0f),
+                Vec3(-1f, 0f, 0f),
+                Vec3(0f, 1f, 0f),
+                Vec3(0f, -1f, 0f),
+                Vec3(0f, 0f, 1f),
+                Vec3(0f, 0f, -1f),
+            )
+
+        fun check() {
+            val present = ArrowCubeScene.buildFaces(board, blocks, occupancy).map { it.block to it.normal }.toSet()
+            for (z in 0 until board.height) {
+                for (y in 0 until board.depth) {
+                    for (x in 0 until board.width) {
+                        val cell = x + board.width * (y + board.depth * z)
+                        val occupant = occupancy[cell]
+                        if (occupant < 0) {
+                            continue
+                        }
+                        for (normal in normals) {
+                            val nx = x + normal.x.toInt()
+                            val ny = y + normal.y.toInt()
+                            val nz = z + normal.z.toInt()
+                            val outside =
+                                nx !in 0 until board.width ||
+                                    ny !in 0 until board.depth ||
+                                    nz !in 0 until board.height
+                            val empty =
+                                !outside &&
+                                    occupancy[nx + board.width * (ny + board.depth * nz)] < 0
+                            if (outside || empty) {
+                                assertTrue(
+                                    "cell $cell block $occupant lost its $normal face",
+                                    (occupant to normal) in present,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        check()
+        val taken =
+            (0 until blocks.size).firstNotNullOfOrNull { index ->
+                val result = game.take(index)
+                if (result.removed) index else null
+            }
+        val index = requireNotNull(taken)
+        blocks = blocks.mapIndexed { slot, block -> if (slot == index) block.copy(removed = true) else block }
+        for (cell in ArrowCubeScene.cellsOf(board, game.blocks()[index])) {
+            occupancy[cell] = -1
+        }
+        check()
+    }
+
+    @Test
     fun a_bumping_block_uncovers_the_faces_around_its_slot() {
         // A bump does not remove the block, so the board's own list still hides the walls of
         // the slot it leaves. Those walls have to be added, or the player looks through the

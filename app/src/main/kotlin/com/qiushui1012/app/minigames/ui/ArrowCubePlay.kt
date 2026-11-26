@@ -24,6 +24,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -65,6 +67,9 @@ private const val BUMP_OUT_MILLIS = 50f
 
 /** How long a blocked block takes to return, in milliseconds. */
 private const val BUMP_BACK_MILLIS = 75f
+
+/** How long a taken block still guards against another tap after it starts to fly. */
+private const val FLY_TAP_DELAY_MILLIS = 75f
 
 /** How wide the shadow band of the three-dimensional board is, in dp. */
 private const val ARROW_SHADOW_DP = 20f
@@ -129,6 +134,17 @@ private sealed interface Motion {
     }
 }
 
+/** One motion and the clock reading it started at. */
+private data class ActiveAnimation(
+    /** What is moving. */
+    val motion: Motion,
+    /** The frame clock value when the motion started. */
+    val startedAtNanos: Long,
+) {
+    /** How far the motion has travelled at [nowNanos], in milliseconds. */
+    fun elapsedMillis(nowNanos: Long): Float = ((nowNanos - startedAtNanos) / 1_000_000f).coerceAtLeast(0f)
+}
+
 /**
  * The arrow cube board: a three-dimensional scene the player rotates, zooms and taps.
  *
@@ -171,8 +187,12 @@ fun ArrowCubePlay(
     val viewport = Viewport(view.width.toFloat(), view.height.toFloat())
     val camera = if (view.width > 0 && view.height > 0) OrbitCamera(boardSize, viewport, yaw, pitch, distance) else null
 
-    var motion by remember(board) { mutableStateOf<Motion?>(null) }
-    var elapsed by remember(board) { mutableFloatStateOf(0f) }
+    // Motions are a list, not one slot: a click outside a flight's path is allowed, and a
+    // second successful take a moment after the first has to fly its own block rather than
+    // replace the first one. The clock below drives all of them.
+    val animations = remember(board) { mutableStateListOf<ActiveAnimation>() }
+    var frameNanos by remember(board) { mutableLongStateOf(0L) }
+    var solvedNotified by remember(board) { mutableStateOf(false) }
 
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val background = MaterialTheme.colorScheme.background
@@ -202,24 +222,30 @@ fun ArrowCubePlay(
         }
     }
 
-    // One frame clock per animation. The time comes from the frame callback rather than from a
-    // fixed step, so a slow frame moves the animation further instead of making it run slow;
-    // coming back from the background starts a new interval rather than jumping the animation.
-    LaunchedEffect(motion) {
-        val current = motion ?: return@LaunchedEffect
-        elapsed = 0f
-        val startedAt = withFrameNanos { it }
+    // One frame clock for every motion. The time comes from the frame callback rather than
+    // from a fixed step, so a slow frame moves the animations further instead of making them
+    // run slow; coming back from the background starts a new interval rather than jumping.
+    LaunchedEffect(board, animations.isNotEmpty()) {
+        if (animations.isEmpty()) {
+            return@LaunchedEffect
+        }
         while (true) {
-            val frame = withFrameNanos { it }
-            elapsed = (frame - startedAt) / 1_000_000f
-            if (elapsed >= current.durationMillis) {
+            val now = withFrameNanos { it }
+            frameNanos = now
+            val finished = animations.filter { it.elapsedMillis(now) >= it.motion.durationMillis }
+            if (finished.isNotEmpty()) {
+                animations.removeAll(finished.toSet())
+                // The board is recorded when the last motion is over, not when the particular
+                // flight that took the last block happens to finish: another block may still be
+                // in the air.
+                if (!solvedNotified && board.isSolved() && animations.isEmpty()) {
+                    solvedNotified = true
+                    onSolved()
+                }
+            }
+            if (animations.isEmpty()) {
                 break
             }
-        }
-        elapsed = current.durationMillis
-        motion = null
-        if (current is Motion.Flying && board.isSolved()) {
-            onSolved()
         }
     }
 
@@ -233,15 +259,10 @@ fun ArrowCubePlay(
 
     /** Takes a block out, or starts the failure animation. */
     fun tapAt(position: Offset) {
-        val active = motion
-        if (active is Motion.Flying) {
-            return
-        }
-        // A bump blocks taps only while the block is away from its place, and a block that is
-        // already touching its blocker never leaves its place at all. The flash that follows
-        // outlives the movement, and a player who has seen the block come back may try again
-        // while it is still blinking: a new failure replaces the flash.
-        if (active is Motion.Bumping && active.gap > 0 && elapsed < BUMP_OUT_MILLIS + BUMP_BACK_MILLIS) {
+        val now = System.nanoTime()
+        // A successful take still guards its first 75 ms; after that it no longer blocks a
+        // click anywhere, including one on the block it is flying away from.
+        if (animations.any { it.motion is Motion.Flying && it.elapsedMillis(now) < FLY_TAP_DELAY_MILLIS }) {
             return
         }
         val current = currentCamera() ?: return
@@ -251,6 +272,21 @@ fun ArrowCubePlay(
                 board = boardSize,
                 occupancy = occupancy,
             ) ?: return
+        // A blocked take is the only click a bump may guard: a failure whose impact point is
+        // on the moving block's path would restart the same animation under the player's
+        // finger. Failures elsewhere and every successful take go through.
+        val wouldFail = ArrowCubeScene.blocker(boardSize, blocks[index], occupancy) != null
+        if (
+            wouldFail &&
+            animations.any { animation ->
+                val bump = animation.motion
+                bump is Motion.Bumping &&
+                    animation.elapsedMillis(now) < bump.durationMillis &&
+                    bumpPathContains(bump, position, current)
+            }
+        ) {
+            return
+        }
         val result = board.take(index)
         onMistakes(board.mistakes)
         if (result.removed) {
@@ -263,30 +299,56 @@ fun ArrowCubePlay(
                 occupancy[cell] = -1
             }
             facesVersion += 1
-            elapsed = 0f
-            motion = Motion.Flying(taken, takenFaces)
+            // A bump of this block, or of the block it was hitting, has nothing left to move.
+            animations.removeAll { animation ->
+                val bump = animation.motion
+                bump is Motion.Bumping && (bump.block.index == index || bump.blocker.index == index)
+            }
+            // A bump that stays alive may have uncovered a neighbour this take just removed.
+            // Rebuild its cavity from the new occupancy so no face of a gone block is painted.
+            for (slot in animations.indices) {
+                val animation = animations[slot]
+                val bump = animation.motion as? Motion.Bumping ?: continue
+                if (bump.gap <= 0) {
+                    continue
+                }
+                animations[slot] =
+                    animation.copy(
+                        motion =
+                            bump.copy(
+                                cavity = ArrowCubeScene.cavityFaces(boardSize, bump.block, blocks, occupancy),
+                            ),
+                    )
+            }
+            animations.add(ActiveAnimation(Motion.Flying(taken, takenFaces), System.nanoTime()))
             return
         }
         val blockerIndex = result.blocker ?: return
-        elapsed = 0f
-        motion =
-            Motion.Bumping(
-                block = blocks[index],
-                blocker = blocks[blockerIndex],
-                gap = result.gap,
-                // A moving block turns, because the camera may keep turning while it moves. All
-                // six faces are kept here so the back-face pass can choose the visible ones
-                // every frame; keeping only the faces that were exposed before the bump would
-                // let the player see through the block once it leaves the neighbours that hid
-                // its sides.
-                faces = ArrowCubeScene.blockFaces(blocks[index]),
-                cavity =
-                    if (result.gap > 0) {
-                        ArrowCubeScene.cavityFaces(boardSize, blocks[index], blocks, occupancy)
-                    } else {
-                        emptyList()
-                    },
-            )
+        animations.removeAll { animation ->
+            val bump = animation.motion
+            bump is Motion.Bumping && bump.block.index == blocks[index].index
+        }
+        animations.add(
+            ActiveAnimation(
+                Motion.Bumping(
+                    block = blocks[index],
+                    blocker = blocks[blockerIndex],
+                    gap = result.gap,
+                    // A moving block turns, because the camera may keep turning while it moves.
+                    // All six faces are kept here so the back-face pass can choose the visible
+                    // ones every frame; keeping only the exposed ones would let the player see
+                    // through the block once it leaves the neighbours that hid its sides.
+                    faces = ArrowCubeScene.blockFaces(blocks[index]),
+                    cavity =
+                        if (result.gap > 0) {
+                            ArrowCubeScene.cavityFaces(boardSize, blocks[index], blocks, occupancy)
+                        } else {
+                            emptyList()
+                        },
+                ),
+                System.nanoTime(),
+            ),
+        )
     }
 
     /** Turns the camera by a drag, in dp, and keeps it outside the box. */
@@ -399,41 +461,58 @@ fun ArrowCubePlay(
         drawRect(background)
         val outlineWidth = (current.scale * OUTLINE_PER_CELL).coerceIn(OUTLINE_MIN_PX, OUTLINE_MAX_DP * density)
 
-        val active = motion
-        val offset = offsetOf(active, elapsed, flyDistance)
+        val active = animations.toList()
+        val now = frameNanos
         // A bump with no gap does not leave its cell, so its faces stay in the static list and
-        // the flash is painted over them. A bump with a gap and a take both move the block: its
-        // six faces are culled again with the camera of this frame, which is what keeps a turn
-        // during the animation from exposing the blocks behind it.
-        val drawMoving = active is Motion.Flying || (active is Motion.Bumping && active.gap > 0)
-        val movingBlock = if (drawMoving) active?.block?.index else null
-        val cavity = (active as? Motion.Bumping)?.takeIf { it.gap > 0 }?.cavity.orEmpty()
+        // the flash is painted over them. A bump with a gap and a take both move their block:
+        // the six faces are culled again with the camera of this frame, which is what keeps a
+        // turn during the animation from exposing the blocks behind it.
+        val movingBlocks =
+            active.mapNotNull { animation ->
+                val bump = animation.motion as? Motion.Bumping
+                if (bump != null && bump.gap > 0) bump.block.index else null
+            }.toSet()
+        val cavity =
+            active
+                .mapNotNull { (it.motion as? Motion.Bumping)?.takeIf { bump -> bump.gap > 0 }?.cavity }
+                .flatten()
+                .distinctBy { it.block to it.normal }
         val staticFaces =
             ArrowCubeScene.visibleFaces(faces + cavity, current).filter { face ->
-                movingBlock == null || face.face.block != movingBlock
+                face.face.block !in movingBlocks
             }
         val movedFaces =
-            if (!drawMoving || active == null) {
-                emptyList()
-            } else {
-                ArrowCubeScene.visibleFaces(
-                    active.faces.map { ArrowCubeScene.withOffset(it, offset) },
-                    current,
-                )
+            active.flatMap { animation ->
+                val motion = animation.motion
+                val travels = motion is Motion.Flying || (motion is Motion.Bumping && motion.gap > 0)
+                if (!travels) {
+                    emptyList()
+                } else {
+                    val offset = offsetOf(motion, animation.elapsedMillis(now), flyDistance)
+                    ArrowCubeScene.visibleFaces(
+                        motion.faces.map { ArrowCubeScene.withOffset(it, offset) },
+                        current,
+                    )
+                }
             }
         val drawFaces =
             if (movedFaces.isEmpty()) {
                 staticFaces
             } else {
                 (staticFaces + movedFaces).sortedWith(
-                    compareByDescending<ProjectedArrowCubeFace> { it.maxDepth }.thenBy { it.face.block },
+                    compareByDescending<ProjectedArrowCubeFace> { it.sortDepth }.thenBy { it.face.block },
                 )
             }
 
         clipRect(left = 0f, top = 0f, right = size.width, bottom = size.height) {
             for (projected in drawFaces) {
                 val path = quadPath(projected)
-                val flash = flashAlpha(active, projected.face.block, elapsed)
+                val flash =
+                    active
+                        .filter { it.motion is Motion.Bumping }
+                        .maxOfOrNull { animation ->
+                            flashAlpha(animation.motion, projected.face.block, animation.elapsedMillis(now))
+                        } ?: 0f
                 drawPath(path, color = toneColor(projected.face.tone, topColor, sideColor, bottomColor), style = Fill)
                 projected.face.decal?.let { decal ->
                     val arrow =
@@ -524,6 +603,88 @@ private fun flashAlpha(
     }
     val cycle = (elapsed % FLASH_PERIOD_MILLIS) / FLASH_PERIOD_MILLIS
     return sin(cycle * PI).toFloat() * 0.55f
+}
+
+/**
+ * Returns whether [position] lies on the screen path of a bump.
+ *
+ * The path is the block swept from its cell to the blocker and back; the screen union of that
+ * sweep is the convex hull of the block's projected corners at the two ends. A click in that
+ * hull would hit the moving block or the face it is crossing and would restart the same
+ * animation, which is the one case a bump still has to ignore.
+ */
+private fun bumpPathContains(
+    bump: Motion.Bumping,
+    position: Offset,
+    camera: OrbitCamera,
+): Boolean {
+    if (bump.gap <= 0) {
+        return false
+    }
+    val direction = directionVector(bump.block.direction)
+    val distance = bump.gap.toFloat()
+    val points = ArrayList<ScreenPoint>()
+    for (face in bump.faces) {
+        for (corner in face.corners) {
+            points.add(camera.project(corner))
+            points.add(camera.project(corner + direction * distance))
+        }
+    }
+    val hull = convexHull(points)
+    return hull.size >= 3 && insideConvex(hull, ScreenPoint(position.x, position.y))
+}
+
+/** Returns the convex hull of screen points, without duplicate or collinear corners. */
+private fun convexHull(points: List<ScreenPoint>): List<ScreenPoint> {
+    val unique = points.distinctBy { it.x to it.y }.sortedWith(compareBy({ it.x }, { it.y }))
+    if (unique.size < 3) {
+        return unique
+    }
+
+    fun cross(
+        origin: ScreenPoint,
+        a: ScreenPoint,
+        b: ScreenPoint,
+    ): Float = (a.x - origin.x) * (b.y - origin.y) - (a.y - origin.y) * (b.x - origin.x)
+
+    val lower = ArrayList<ScreenPoint>()
+    for (point in unique) {
+        while (lower.size >= 2 && cross(lower[lower.size - 2], lower.last(), point) <= 0f) {
+            lower.removeAt(lower.lastIndex)
+        }
+        lower.add(point)
+    }
+    val upper = ArrayList<ScreenPoint>()
+    for (point in unique.asReversed()) {
+        while (upper.size >= 2 && cross(upper[upper.size - 2], upper.last(), point) <= 0f) {
+            upper.removeAt(upper.lastIndex)
+        }
+        upper.add(point)
+    }
+    return lower.dropLast(1) + upper.dropLast(1)
+}
+
+/** Returns whether a point is inside or on a convex polygon in either winding order. */
+private fun insideConvex(
+    hull: List<ScreenPoint>,
+    point: ScreenPoint,
+): Boolean {
+    var sign = 0
+    for (index in hull.indices) {
+        val a = hull[index]
+        val b = hull[(index + 1) % hull.size]
+        val cross = (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x)
+        if (abs(cross) < 1e-4f) {
+            continue
+        }
+        val current = if (cross > 0f) 1 else -1
+        if (sign == 0) {
+            sign = current
+        } else if (sign != current) {
+            return false
+        }
+    }
+    return true
 }
 
 /** Returns the colour of a face band under the current scheme. */

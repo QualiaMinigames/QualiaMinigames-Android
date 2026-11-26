@@ -75,8 +75,14 @@ data class ProjectedArrowCubeFace(
     val face: ArrowCubeFace,
     /** Its four corners on the screen. */
     val corners: List<ScreenPoint>,
-    /** The largest camera depth of its corners, which is what it is sorted by. */
-    val maxDepth: Float,
+    /**
+     * The camera depth of the face's centre, which is what it is sorted by.
+     *
+     * A long face's farthest corner is farther than the face itself; using it as the key can
+     * put a near two-cell face behind a face it actually covers. The mean of the corners is
+     * the centre for a parallelogram and keeps a long face in its place.
+     */
+    val sortDepth: Float,
 )
 
 /**
@@ -143,6 +149,44 @@ object ArrowCubeScene {
             faces.addAll(exposedFaces(board, block, occupancy))
         }
         return faces
+    }
+
+    /**
+     * Returns the block in an arrow's path, or null when the way is clear.
+     *
+     * This is the read-only half of the take rule: the screen asks it before a tap so that a
+     * blocked take can be recognised without counting a mistake, and only then lets the board
+     * perform the take that records one.
+     */
+    fun blocker(
+        board: BoardSize,
+        block: ArrowCubeBlock,
+        occupancy: IntArray,
+    ): Int? {
+        val cells = cellsOf(board, block)
+        val positive = isPositive(block.direction)
+        val axis = axisOf(block.direction)
+        val front = if (positive) cells.last() else cells.first()
+        val width = board.width
+        val depth = board.depth
+        var x = front % width
+        var y = (front / width) % depth
+        var z = front / (width * depth)
+        val dx = if (axis == ArrowCubeAxis.X) (if (positive) 1 else -1) else 0
+        val dy = if (axis == ArrowCubeAxis.Y) (if (positive) 1 else -1) else 0
+        val dz = if (axis == ArrowCubeAxis.Z) (if (positive) 1 else -1) else 0
+        while (true) {
+            x += dx
+            y += dy
+            z += dz
+            if (x !in 0 until board.width || y !in 0 until board.depth || z !in 0 until board.height) {
+                return null
+            }
+            val occupant = occupancy[x + width * (y + depth * z)]
+            if (occupant >= 0) {
+                return occupant
+            }
+        }
     }
 
     /** Returns the faces of one block that the board leaves exposed. */
@@ -243,9 +287,12 @@ object ArrowCubeScene {
     /**
      * Returns the faces that survive back-face and viewport culling, sorted back to front.
      *
-     * The sort key is the largest camera depth of a face's corners, which is the corner nearest
-     * the camera in an orthographic view; faces with the same depth are ordered by their block
-     * index so that two frames of one board paint the same face in the same order.
+     * The sort key is the camera depth of a face's centre. A face's farthest corner belongs to
+     * the face but is farther than the face as a whole; a two-cell face can have a far corner
+     * behind a smaller face that it actually covers, which would paint the smaller face on top.
+     * The corners' mean is the centre for a parallelogram. Faces with the same depth are
+     * ordered by their block index so that two frames of one board paint the same face in the
+     * same order.
      */
     fun visibleFaces(
         faces: List<ArrowCubeFace>,
@@ -256,11 +303,14 @@ object ArrowCubeScene {
             .filter { it.normal.dot(camera.basis.forward) < 0f }
             .map { face ->
                 val corners = face.corners.map(camera::project)
-                val depth = face.corners.maxOf(camera::depth)
-                ProjectedArrowCubeFace(face = face, corners = corners, maxDepth = depth)
+                ProjectedArrowCubeFace(
+                    face = face,
+                    corners = corners,
+                    sortDepth = face.corners.map(camera::depth).average().toFloat(),
+                )
             }
             .filter { face -> !isOutside(face.corners, camera.viewport) }
-            .sortedWith(compareByDescending<ProjectedArrowCubeFace> { it.maxDepth }.thenBy { it.face.block })
+            .sortedWith(compareByDescending<ProjectedArrowCubeFace> { it.sortDepth }.thenBy { it.face.block })
             .toList()
 
     /**
@@ -312,8 +362,23 @@ object ArrowCubeScene {
         ProjectedArrowCubeFace(
             face = face,
             corners = face.corners.map(camera::project),
-            maxDepth = face.corners.maxOf(camera::depth),
+            sortDepth = face.corners.map(camera::depth).average().toFloat(),
         )
+
+    /** Returns whether a direction runs towards larger coordinates on its axis. */
+    private fun isPositive(direction: ArrowCubeDirection): Boolean =
+        when (direction) {
+            ArrowCubeDirection.East, ArrowCubeDirection.North, ArrowCubeDirection.Up -> true
+            ArrowCubeDirection.West, ArrowCubeDirection.South, ArrowCubeDirection.Down -> false
+        }
+
+    /** Returns the axis a direction runs along. */
+    private fun axisOf(direction: ArrowCubeDirection): ArrowCubeAxis =
+        when (direction) {
+            ArrowCubeDirection.East, ArrowCubeDirection.West -> ArrowCubeAxis.X
+            ArrowCubeDirection.North, ArrowCubeDirection.South -> ArrowCubeAxis.Y
+            ArrowCubeDirection.Up, ArrowCubeDirection.Down -> ArrowCubeAxis.Z
+        }
 
     /** Returns the flat step between the two cells of a block on an axis. */
     private fun stepIndex(
@@ -341,7 +406,7 @@ object ArrowCubeScene {
         return listOf(first, second)
     }
 
-    /** Returns whether any cell of a block on a face sees an empty cell or the edge beyond it. */
+    /** Returns whether a face of a block sees an empty cell or the edge beyond it. */
     private fun isExposed(
         board: BoardSize,
         cells: List<Triple<Int, Int, Int>>,
@@ -352,40 +417,19 @@ object ArrowCubeScene {
         val dy = normal.y.toInt()
         val dz = normal.z.toInt()
         for ((x, y, z) in cells) {
-            if (!onSide(cells, Triple(x, y, z), dx, dy, dz)) {
-                continue
-            }
             val nx = x + dx
             val ny = y + dy
             val nz = z + dz
             if (nx !in 0 until board.width || ny !in 0 until board.depth || nz !in 0 until board.height) {
                 return true
             }
+            // The cell of a two-cell block on the other side of an internal face is occupied by
+            // the same block, so only an empty or outside neighbour exposes the face.
             if (occupancy[nx + board.width * (ny + board.depth * nz)] < 0) {
                 return true
             }
         }
         return false
-    }
-
-    /** Returns whether a cell of a block lies on the face with the given outward normal. */
-    private fun onSide(
-        cells: List<Triple<Int, Int, Int>>,
-        cell: Triple<Int, Int, Int>,
-        dx: Int,
-        dy: Int,
-        dz: Int,
-    ): Boolean {
-        val (x, y, z) = cell
-        return when {
-            dx > 0 -> cells.none { it.first > x }
-            dx < 0 -> cells.none { it.first < x }
-            dy > 0 -> cells.none { it.second > y }
-            dy < 0 -> cells.none { it.second < y }
-            dz > 0 -> cells.none { it.third > z }
-            dz < 0 -> cells.none { it.third < z }
-            else -> false
-        }
     }
 
     /** Returns the four corners of a box face, in a fixed order. */
