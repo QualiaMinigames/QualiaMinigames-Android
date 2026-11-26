@@ -480,11 +480,11 @@ object ArrowCubeScene {
         return left || right || top || bottom
     }
 
-    /** How many cells a taken block travels each second: 55% of the board's longest side. */
-    fun flySpeed(board: BoardSize): Float = 0.55f * board.longestSide
+    /** How many cells a taken block travels each second: 75% of the board's longest side. */
+    fun flySpeed(board: BoardSize): Float = 2.25f * board.longestSide
 
-    /** How many cells a blocked block travels each second: 40% of the board's longest side. */
-    fun bumpSpeed(board: BoardSize): Float = 0.40f * board.longestSide
+    /** How many cells a blocked block travels each second: 70% of the board's longest side. */
+    fun bumpSpeed(board: BoardSize): Float = 2f * board.longestSide
 }
 
 /**
