@@ -663,10 +663,10 @@ private fun flashAlpha(
 private fun flightAlpha(
     motion: Motion,
     elapsed: Float,
-): Float {
-    if (motion !is Motion.Flying) {
-        return 1f
-    }
+): Float = if (motion is Motion.Flying) flightFadeAlpha(elapsed) else 1f
+
+/** Returns the fade applied after the fallback threshold, independent of the motion kind. */
+internal fun flightFadeAlpha(elapsed: Float): Float {
     val fadeStart = FLY_MILLIS * 2f
     if (elapsed <= fadeStart) {
         return 1f
