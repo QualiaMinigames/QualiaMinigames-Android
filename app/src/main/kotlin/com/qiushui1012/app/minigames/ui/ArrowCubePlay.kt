@@ -28,6 +28,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -59,11 +60,14 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.sin
 
-/** How long a taken block flies out, in milliseconds. */
+/** The flight duration the fade threshold refers to; twice this is when the fallback starts. */
 private const val FLY_MILLIS = 1500f
 
-/** How long a blocked block travels towards its blocker, in milliseconds. */
-private const val BUMP_OUT_MILLIS = 50f
+/** How long a taken block fades after it has failed to leave the render area, in milliseconds. */
+private const val FLY_FADE_MILLIS = 500f
+
+/** The contact phase after the constant approach, kept from the old outbound duration. */
+private const val BUMP_CONTACT_MILLIS = 50f
 
 /** How long a blocked block takes to return, in milliseconds. */
 private const val BUMP_BACK_MILLIS = 75f
@@ -115,7 +119,7 @@ private sealed interface Motion {
         /** The six faces the block had while it was still in the board. */
         override val faces: List<ArrowCubeFace>,
     ) : Motion {
-        override val durationMillis: Float = FLY_MILLIS
+        override val durationMillis: Float = FLY_MILLIS * 2f + FLY_FADE_MILLIS
     }
 
     /** A blocked block bumping into its blocker and coming back. */
@@ -125,12 +129,15 @@ private sealed interface Motion {
         val blocker: ArrowCubeBlock,
         /** How many empty cells lie between the two. */
         val gap: Int,
+        /** How long the constant-speed approach takes, in milliseconds. */
+        val travelMillis: Float,
         /** All six faces of the blocked block. */
         override val faces: List<ArrowCubeFace>,
         /** The faces the slot left by the block uncovers while it is away. */
         val cavity: List<ArrowCubeFace>,
     ) : Motion {
-        override val durationMillis: Float = max(BUMP_OUT_MILLIS + BUMP_BACK_MILLIS, FLASH_PERIOD_MILLIS * FLASH_CYCLES)
+        override val durationMillis: Float =
+            max(travelMillis + BUMP_CONTACT_MILLIS + BUMP_BACK_MILLIS, FLASH_PERIOD_MILLIS * FLASH_CYCLES)
     }
 }
 
@@ -212,7 +219,11 @@ fun ArrowCubePlay(
             Color.Black.copy(alpha = 0.08f)
         }
     val description = stringResource(R.string.cd_arrow_cube_board)
-    val flyDistance = remember(boardSize) { ArrowCubeScene.flyDistance(boardSize) }
+    val flySpeed = remember(boardSize) { ArrowCubeScene.flySpeed(boardSize) }
+    val bumpSpeed = remember(boardSize) { ArrowCubeScene.bumpSpeed(boardSize) }
+    // The frame clock below outlives a composition that changes the camera, and the off-screen
+    // test has to see the camera of the frame it is testing.
+    val currentCameraState = rememberUpdatedState(camera)
 
     // A restored game can already be finished: there is nothing to animate, and the screen
     // still has to record the play.
@@ -232,7 +243,18 @@ fun ArrowCubePlay(
         while (true) {
             val now = withFrameNanos { it }
             frameNanos = now
-            val finished = animations.filter { it.elapsedMillis(now) >= it.motion.durationMillis }
+            val cameraNow = currentCameraState.value
+            val finished =
+                animations.filter { animation ->
+                    val elapsed = animation.elapsedMillis(now)
+                    val motion = animation.motion
+                    if (motion is Motion.Flying) {
+                        elapsed >= motion.durationMillis ||
+                            (cameraNow != null && flightOutside(motion, elapsed, cameraNow, flySpeed))
+                    } else {
+                        elapsed >= motion.durationMillis
+                    }
+                }
             if (finished.isNotEmpty()) {
                 animations.removeAll(finished.toSet())
                 // The board is recorded when the last motion is over, not when the particular
@@ -334,6 +356,9 @@ fun ArrowCubePlay(
                     block = blocks[index],
                     blocker = blocks[blockerIndex],
                     gap = result.gap,
+                    // The constant part ends at the blocker; the contact phase keeps the old
+                    // outbound duration and the return keeps its own, so the total matches.
+                    travelMillis = if (result.gap > 0) result.gap * 1000f / bumpSpeed else 0f,
                     // A moving block turns, because the camera may keep turning while it moves.
                     // All six faces are kept here so the back-face pass can choose the visible
                     // ones every frame; keeping only the exposed ones would let the player see
@@ -488,7 +513,7 @@ fun ArrowCubePlay(
                 if (!travels) {
                     emptyList()
                 } else {
-                    val offset = offsetOf(motion, animation.elapsedMillis(now), flyDistance)
+                    val offset = offsetOf(motion, animation.elapsedMillis(now), flySpeed)
                     ArrowCubeScene.visibleFaces(
                         motion.faces.map { ArrowCubeScene.withOffset(it, offset) },
                         current,
@@ -506,6 +531,16 @@ fun ArrowCubePlay(
 
         clipRect(left = 0f, top = 0f, right = size.width, bottom = size.height) {
             for (projected in drawFaces) {
+                val flying =
+                    active.firstOrNull { animation ->
+                        val motion = animation.motion
+                        motion is Motion.Flying && motion.block.index == projected.face.block
+                    }
+                val alpha =
+                    flying?.let { flightAlpha(it.motion, it.elapsedMillis(now)) } ?: 1f
+                if (alpha <= 0f) {
+                    continue
+                }
                 val path = quadPath(projected)
                 val flash =
                     active
@@ -513,22 +548,28 @@ fun ArrowCubePlay(
                         .maxOfOrNull { animation ->
                             flashAlpha(animation.motion, projected.face.block, animation.elapsedMillis(now))
                         } ?: 0f
-                drawPath(path, color = toneColor(projected.face.tone, topColor, sideColor, bottomColor), style = Fill)
+                drawPath(
+                    path,
+                    color = toneColor(projected.face.tone, topColor, sideColor, bottomColor),
+                    alpha = alpha,
+                    style = Fill,
+                )
                 projected.face.decal?.let { decal ->
                     val arrow =
                         ArrowCubeScene.decalPoints(projected.face).map(current::project).toPath()
                     if (arrow != null) {
                         // An arrow belongs to its face; clipping is the last guarantee that a
                         // rounding error at a long face's end cannot paint on a neighbour.
-                        clipPath(path) { drawPath(arrow, color = arrowColor, style = Fill) }
+                        clipPath(path) { drawPath(arrow, color = arrowColor, alpha = alpha, style = Fill) }
                     }
                 }
                 if (flash > 0f) {
-                    drawPath(path, color = flashColor.copy(alpha = flash), style = Fill)
+                    drawPath(path, color = flashColor.copy(alpha = flash * alpha), style = Fill)
                 }
                 drawPath(
                     path,
                     color = outline,
+                    alpha = alpha,
                     style = Stroke(width = outlineWidth, join = StrokeJoin.Miter),
                 )
             }
@@ -562,15 +603,15 @@ fun ArrowCubePlay(
 
 /** Returns the world offset of an animation at a moment. */
 private fun offsetOf(
-    motion: Motion?,
+    motion: Motion,
     elapsed: Float,
-    flyDistance: Float,
+    flySpeed: Float,
 ): Vec3 =
     when (motion) {
-        null -> Vec3.ZERO
         is Motion.Flying -> {
-            val progress = (elapsed / FLY_MILLIS).coerceIn(0f, 1f)
-            directionVector(motion.block.direction) * (flyDistance * easeOutCubic(progress))
+            // Linear from the first frame: a block that still shows after twice the old
+            // duration is handled by the fade, not by slowing down its last visible part.
+            directionVector(motion.block.direction) * (flySpeed * elapsed / 1000f)
         }
 
         is Motion.Bumping -> {
@@ -578,13 +619,23 @@ private fun offsetOf(
                 Vec3.ZERO
             } else {
                 val distance = motion.gap - 1f / 64f
-                val travelled =
-                    if (elapsed <= BUMP_OUT_MILLIS) {
-                        easeOutCubic(elapsed / BUMP_OUT_MILLIS)
-                    } else {
-                        (1f - easeOutCubic((elapsed - BUMP_OUT_MILLIS) / BUMP_BACK_MILLIS)).coerceIn(0f, 1f)
+                val travel = motion.travelMillis
+                when {
+                    elapsed <= travel -> {
+                        directionVector(motion.block.direction) *
+                            (distance * (elapsed / travel).coerceIn(0f, 1f))
                     }
-                directionVector(motion.block.direction) * (distance * travelled)
+
+                    elapsed <= travel + BUMP_CONTACT_MILLIS -> {
+                        directionVector(motion.block.direction) * distance
+                    }
+
+                    else -> {
+                        val back =
+                            ((elapsed - travel - BUMP_CONTACT_MILLIS) / BUMP_BACK_MILLIS).coerceIn(0f, 1f)
+                        directionVector(motion.block.direction) * (distance * (1f - easeOutCubic(back)))
+                    }
+                }
             }
         }
     }
@@ -601,8 +652,44 @@ private fun flashAlpha(
     if (block != motion.block.index && block != motion.blocker.index) {
         return 0f
     }
+    if (elapsed >= FLASH_PERIOD_MILLIS * FLASH_CYCLES) {
+        return 0f
+    }
     val cycle = (elapsed % FLASH_PERIOD_MILLIS) / FLASH_PERIOD_MILLIS
     return sin(cycle * PI).toFloat() * 0.55f
+}
+
+/** Returns the opacity of a flying block at a moment. */
+private fun flightAlpha(
+    motion: Motion,
+    elapsed: Float,
+): Float {
+    if (motion !is Motion.Flying) {
+        return 1f
+    }
+    val fadeStart = FLY_MILLIS * 2f
+    if (elapsed <= fadeStart) {
+        return 1f
+    }
+    return (1f - (elapsed - fadeStart) / FLY_FADE_MILLIS).coerceIn(0f, 1f)
+}
+
+/** Returns whether every corner of a flying block is outside the render area. */
+private fun flightOutside(
+    motion: Motion.Flying,
+    elapsed: Float,
+    camera: OrbitCamera,
+    flySpeed: Float,
+): Boolean {
+    val offset = directionVector(motion.block.direction) * (flySpeed * elapsed / 1000f)
+    val corners = motion.faces.flatMap { face -> face.corners.map { camera.project(it + offset) } }
+    if (corners.isEmpty()) {
+        return true
+    }
+    return corners.maxOf { it.x } < 0f ||
+        corners.minOf { it.x } > camera.viewport.width ||
+        corners.maxOf { it.y } < 0f ||
+        corners.minOf { it.y } > camera.viewport.height
 }
 
 /**

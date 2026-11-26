@@ -18,7 +18,6 @@ import com.qiushui1012.app.minigames.rules.ArrowCubeAxis
 import com.qiushui1012.app.minigames.rules.ArrowCubeBlock
 import com.qiushui1012.app.minigames.rules.ArrowCubeDirection
 import kotlin.math.abs
-import kotlin.math.max
 
 /** Which face of the block a quadrilateral is, as far as the colour is concerned. */
 enum class ArrowCubeFaceTone {
@@ -481,8 +480,11 @@ object ArrowCubeScene {
         return left || right || top || bottom
     }
 
-    /** The longest side of a board, used by the animation to fly a block out of the view. */
-    fun flyDistance(board: BoardSize): Float = max(board.radius * 2f, 4f * board.longestSide) + 2f
+    /** How many cells a taken block travels each second: 55% of the board's longest side. */
+    fun flySpeed(board: BoardSize): Float = 0.55f * board.longestSide
+
+    /** How many cells a blocked block travels each second: 40% of the board's longest side. */
+    fun bumpSpeed(board: BoardSize): Float = 0.40f * board.longestSide
 }
 
 /**

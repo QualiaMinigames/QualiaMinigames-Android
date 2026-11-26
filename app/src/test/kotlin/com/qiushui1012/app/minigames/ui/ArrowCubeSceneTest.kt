@@ -267,6 +267,13 @@ class ArrowCubeSceneTest {
     }
 
     @Test
+    fun the_animation_speeds_are_a_share_of_the_longest_side_per_second() {
+        val board = BoardSize(10, 8, 6)
+        assertEquals(5.5f, ArrowCubeScene.flySpeed(board), 1e-6f)
+        assertEquals(4.0f, ArrowCubeScene.bumpSpeed(board), 1e-6f)
+    }
+
+    @Test
     fun the_blocker_read_agrees_with_the_game_take() {
         val board = BoardSize(5, 5, 5)
         val rules = requireNotNull(com.qiushui1012.app.minigames.rules.Rules.newArrowCube(5, 5, 5, 11))
